@@ -1,14 +1,14 @@
 <?php
 /**
  * Plugin Name: Stupid Simple Login Logo
- * Plugin URI: https://github.com/bcrabs/stupid-simple-login-logo
+ * Plugin URI: https://github.com/crftddev/stupid-simple-login-logo
  * Description: Allows administrators to change the WordPress login page logo.
  * Version: 1.12
  * Requires at least: 5.0
  * Requires PHP: 5.6
- * Author: Brandon Crabtree
- * Author URI: https://bcrabtree.com
- * Update URI: https://github.com/bcrabs/stupid-simple-login-logo
+ * Author: CRFTD
+ * Author URI: https://crftd.dev
+ * Update URI: https://github.com/crftddev/stupid-simple-login-logo
  * Text Domain: ssll-for-wp
  * Domain Path: /languages
  * License: GPL v2 or later
