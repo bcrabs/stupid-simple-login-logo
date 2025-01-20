@@ -1,0 +1,388 @@
+VERSION 1.12
+01/19/25
+Plugin security too restrivtive. Updated for standard role access.
+
+
+--
+
+
+VERSION 1.11
+01/19/25
+1. Fixed Save Logo functionality:
+- Added proper form submission to admin-post.php
+- Added dedicated save button that appears when an image is selected
+- Added proper nonce verification for save action
+- Added success/error messages after save
+
+2. Fixed Remove Logo functionality:
+- Changed from AJAX to form submission
+- Added proper nonce verification
+- Added confirmation dialog
+- Added success message after removal
+- Made the remove button a proper link with action URL
+
+3. Improved UI/UX:
+- Buttons appear/disappear appropriately
+- Clear feedback messages
+- Proper state management
+- Better error handling
+
+
+---
+
+
+VERSION 1.10
+01/19/25
+1. Remove the direct file upload option
+2. Fix the login page image display issue by:
+- Properly saving the image URL
+- Adding proper CSS for the login page
+- Validating image URLs before saving
+- Implementing proper cache handling
+
+3. Improve the Media Library integration with:
+- Better error handling
+- Proper AJAX processing
+- Improved UI feedback
+- Proper state management
+
+
+--
+
+
+VERSION 1.09
+01/19/25
+1. 404 Error Fix:
+- Removed minification
+- Added proper script dependencies
+- Fixed file path handling
+
+2. MIME Type Fix:
+- Added proper MIME type in .htaccess
+- Added proper content-type headers
+- Added FilesMatch directive for JS files
+
+3. Media Library Fix:
+- Added proper wp.media frame initialization
+- Added required dependencies
+- Added proper frame configuration
+- Improved error handling
+- Added auto-submit on selection
+- Added better preview handling
+
+4. Additional Improvements:
+- Better error handling and user feedback
+- Improved preview functionality
+- Added proper file validation
+- Added better AJAX handling
+- Added proper form handling
+
+
+---
+
+
+VERSION 1.08
+01/17/2025
+1. Security Enhancements
+- Added rate limiting
+- Added proper capability checks
+- Added file size limits
+- Added comprehensive MIME type validation
+- Added proper resource cleanup
+- Added nonce verification in JavaScript
+- Added proper error handling and logging
+
+2. Resource Management
+- Added memory limit management
+- Added timeout handling
+- Added proper file handle cleanup
+- Added chunked file reading
+- Added buffer size limits
+
+3. Error Handling
+- Added comprehensive try-catch blocks
+- Added proper cleanup in error cases
+- Added proper HTTP response codes
+- Added user-friendly error messages
+
+4. Performance Optimization
+- Added proper caching headers
+- Added chunked file reading
+- Added rate limiting to prevent abuse
+- Added proper cleanup of transients
+
+5. Database Performance
+- Added autoload flag for frequently accessed options
+- Implemented object caching for logo URL
+- Optimized transient cleanup
+
+6. Resource Loading
+- Implemented conditional script loading
+- Added script minification support
+- Improved asset versioning
+- Implemented lazy loading where appropriate
+
+7. File Handling
+- Added support for X-Sendfile when available
+- Optimized chunk size for file reading
+- Improved caching headers
+- Added 304 Not Modified support
+
+8. Memory Usage
+- Implemented static caching for repeated operations
+- Added early exits to prevent unnecessary processing
+- Optimized file validation
+- Added constants for better memory management
+
+9. Code Organization
+- Implemented singleton pattern for admin
+- Added proper class structure
+- Improved hook organization
+- Added proper initialization checks
+
+10. Cache Optimization
+- Added proper cache headers
+- Implemented object caching
+- Added ETag support
+- Improved cache cleanup
+
+11. Input Validation
+- Strict type checking
+- Size limitations
+- Path traversal prevention
+- MIME type validation
+
+12. Access Control
+- Capability checking
+- Nonce verification
+- Rate limiting
+- Session validation
+
+13. File Security
+- Secure file uploads
+- Path sanitization
+- MIME type verification
+- Size restrictions
+- Secure file serving
+
+13. Cache Security
+- Secure cache keys
+- Cache validation
+- Proper cleanup
+- Namespace isolation
+
+14. XSS Prevention
+- Output escaping
+- Input sanitization
+- Content-Type headers
+- Security headers
+
+15. Performance & Resource Management
+- Chunked file reading
+- Memory limit management
+- Cache optimization
+- Resource cleanup
+
+
+---
+
+
+VERSION 1.07
+01/17/2025
+1. Incomplete Function Content Error
+- The code is truncated at the end of ssll_login_logo_url_title(). We're missing:
+- The rest of the function body
+- The activation hook implementation
+- The deactivation hook implementation
+- The uninstall hook implementation
+
+2. Missing Function Check: In the security headers function is_login() is not a WordPress core function.
+
+3. File Operation Security Issue: Direct usage of file_put_contents() in ssll_create_js_file() should use WordPress filesystem API instead.
+
+4. Missing Permission Check: ssll_serve_logo() doesn't verify user permissions before serving the logo.
+
+5. Incomplete Error Handling readfile() in ssll_serve_logo() lacks error handling.
+
+6. Domain Validation Logic Error: In ssll_validate_image_url(), the domain validation might fail for root domain (non-www) installations.
+
+7. Missing Hook Priority: Security headers should have an early priority.
+
+
+---
+
+
+VERSION 1.06
+01/17/2025
+1. Added Security Headers:
+- Added X-Content-Type-Options: nosniff header
+- Added proper Cache-Control headers
+- Added Expires headers
+
+2.Enhanced URL Validation:
+- Added domain/subdomain validation
+- Added MIME type verification
+- Added file existence checking
+
+3. Implemented Secure Logo Serving:
+- Added custom rewrite rules for logo serving
+- Added proper MIME type detection
+- Added secure file serving mechanism
+
+4. Added URL Security:
+- Added validation for cross-domain requests
+- Added MIME type verification before saving
+- Added secure URL generation
+
+5. Improved Error Handling:
+- Added proper 404 responses
+- Added invalid file type responses
+- Added proper error messages
+
+6. Enhanced File Type Security:
+- Added multiple layers of MIME type verification
+- Added file extension validation
+- Added proper content type headers
+
+
+---
+
+
+VERSION 1.05
+01/15/2025
+1. Added Multisite Path Handling:
+- Created ssll_get_plugin_path() function for file system paths
+- Created ssll_get_plugin_url() function for URLs
+- Both functions handle subdomain installations by removing site-specific path elements
+
+2. Updated Path Usage:
+- Replaced direct plugin_dir_path() calls with ssll_get_plugin_path()
+- Replaced direct plugin_dir_url() calls with ssll_get_plugin_url()
+
+Fixed:
+- Proper path handling in multisite installations
+- Correct plugin update notifications
+- Support for translations
+
+Now Supports:
+- Multisite installations
+- Subdomain installations
+- WordPress.org plugin repository standards
+- Internationalization
+
+
+---
+
+
+VERSION 1.04
+01/15/2025
+1. Added Media Library Integration:
+- Added WordPress media uploader scripts
+- Created a custom JavaScript file for handling media selection
+- Added Media Library button and interface
+- Added image preview functionality
+- Added remove image button
+
+2. Modified Form Handling:
+- Removed direct file upload handling
+- Added media URL handling
+- Updated security checks for new functionality
+- Added proper preview handling
+
+3. Added User Interface Improvements:
+- Added image preview
+- Added remove image button
+- Added clear visual feedback
+- Improved button layout and styling
+
+4. Added Plugin Architecture Improvements:
+- Added JavaScript file creation on activation
+- Added proper script enqueuing
+- Added proper directory creation handling
+- Maintained all security features from previous version
+
+5. Simplified the Code:
+- Removed unnecessary file upload handling
+- Streamlined option management
+- Improved error handling
+- Maintained security while reducing complexity
+
+
+---
+
+
+VERSION 1.03
+01/15/2025
+VULNERABILITY: Checks MIME type, can be easily spoofed, removed.
+FIX: Add proper file validation:
+Security improvements made:
+
+1. File Upload Security:
+- Added multiple layers of file validation (MIME type using fileinfo)
+- Added image validation using getimagesize()
+- Implemented file size limits
+- Created unique filenames using wp_hash() and random_bytes()
+- Used WordPress file handling functions instead of raw PHP functions
+- Properly cleanup old files
+
+2. Access Control:
+- Added proper capability checks throughout
+- Added nonce verification with specific action names
+- Added proper error responses with wp_die()
+- Implemented proper uninstall procedures
+
+3. Data Sanitization/Validation:
+- Added proper sanitization for all output (esc_html, esc_url)
+- Added sanitization for all stored data
+- Implemented proper error handling with WP_Error
+
+4. File System Security:
+- Removed direct file system operations
+- Used WordPress file system abstractions
+- Added proper directory traversal prevention
+- Implemented proper file cleanup
+
+5. General Security:
+- Added version tracking for future updates
+- Improved error handling and user feedback
+- Added proper response codes for errors
+- Added proper activation/deactivation hooks
+- Added proper uninstall procedures
+
+6. Input Validation:
+- Added comprehensive file validation
+- Added proper nonce checking
+- Added capability checking
+- Added proper error messages
+
+These changes make the plugin much more secure against:
+- File upload vulnerabilities
+- Directory traversal attacks
+- XSS attacks
+- CSRF attacks
+- Privilege escalation
+- Information disclosure
+- File system attacks
+
+
+---
+
+
+VERSION 1.02
+01/15/2025
+Keeping this clean, tidy, and low footprint
+1. Replaced add_menu_page() with add_options_page() to create a submenu under Settings
+
+2. Updated the page title to "Custom Login Logo Settings" for consistency
+
+3. Added a success message after logo upload using add_settings_error()
+
+4. Improved the settings page layout to match WordPress core styling
+
+
+---
+
+
+VERSION 1.01
+01/15/2025
+Intial release
