@@ -6,8 +6,6 @@ To use the plugin:
 5. Click "Save Logo" to save changes
 6. Click "Remove Logo" to remove the custom logo
 
--
-
 stupid-simple-login-logo/
 ├── includes/
 │   ├── class-init.php
