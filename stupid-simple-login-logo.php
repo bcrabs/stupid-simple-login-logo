@@ -78,24 +78,3 @@ if (is_admin() || strpos($_SERVER['PHP_SELF'], 'wp-login.php') !== false) {
     require_once SSLL_PATH . 'includes/class-init.php';
     add_action('plugins_loaded', array('SSLL\\Init', 'get_instance'), 10);
 }
-
-
-/**
- * Initialize the plugin tracker
- *
- * @return void
- */
-function appsero_init_tracker_stupid_simple_login_logo() {
-
-    if ( ! class_exists( 'Appsero\Client' ) ) {
-      require_once __DIR__ . '/appsero/src/Client.php';
-    }
-
-    $client = new Appsero\Client( '98b57974-cbe9-4228-b48b-01683ea5c6d3', 'Stupid Simple Login Logo', __FILE__ );
-
-    // Active insights
-    $client->insights()->init();
-
-}
-
-appsero_init_tracker_stupid_simple_login_logo();
