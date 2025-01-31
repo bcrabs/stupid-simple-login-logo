@@ -7,6 +7,10 @@ To use the plugin:
 6. Click "Remove Logo" to remove the custom logo
 
 stupid-simple-login-logo/
+├── appsero/
+│   └── src/
+│       ├── Client.php
+│       └── [other AppSero SDK files]
 ├── includes/
 │   ├── class-init.php
 │   ├── class-security.php
