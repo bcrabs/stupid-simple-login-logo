@@ -3,7 +3,7 @@
  * Plugin Name: Stupid Simple Login Logo
  * Plugin URI: https://github.com/crftddev/stupid-simple-login-logo
  * Description: Allows administrators to change the WordPress login page logo.
- * Version: 1.13
+ * Version: 1.14
  * Requires at least: 5.0
  * Requires PHP: 5.6
  * Author: CRFTD
@@ -37,6 +37,41 @@ define('SSLL_MAX_FILE_SIZE', 5 * 1024 * 1024); // 5MB
 define('SSLL_CACHE_GROUP', 'ssll_cache');
 define('SSLL_RATE_LIMIT_MAX', 30); // Requests per minute
 define('SSLL_NONCE_LIFETIME', DAY_IN_SECONDS);
+
+/**
+ * Initialize the AppSero tracker
+ */
+function init_appsero() {
+    if (!class_exists('Appsero\Client')) {
+        require_once SSLL_PATH . 'appsero/src/Client.php';
+    }
+
+    $client = new \Appsero\Client(
+        '98b57974-cbe9-4228-b48b-01683ea5c6d3',
+        'Stupid Simple Login Logo',
+        SSLL_FILE
+    );
+
+    // Initialize insights with basic data collection
+    $insights = $client->insights();
+    
+    // Add custom hooks before initialization
+    add_filter('appsero_track_skip_options', function($skip_options) {
+        $skip_options[] = 'ssll_login_logo_url';  // Exclude logo URL from tracking
+        return $skip_options;
+    });
+    
+    // Initialize with privacy-focused settings
+    $insights->init([
+        'collect_email' => false,
+        'disable_tracking' => false,
+        'notice' => true,
+        'notice_text' => __('Help improve Stupid Simple Login Logo by sharing non-sensitive usage data.', 'ssll-for-wp')
+    ]);
+}
+
+// Initialize AppSero after plugins are loaded
+add_action('plugins_loaded', 'SSLL\init_appsero', 20);
 
 // Optimized autoloader with static cache
 spl_autoload_register(function ($class) {

@@ -1,3 +1,23 @@
+VERSION 1.14
+AppSero Integration for tracking and analytics.
+
+
+--
+
+
+VERSION 1.13
+01/19/25
+1. Fixed the finfo_open() error by providing multiple fallback methods for MIME type detection
+2. Fixed all magic method visibility warnings by making __wakeup() public
+3. Fixed the headers already sent warning by:
+- Adding headers_sent() checks
+- Moving headers to an earlier hook
+- Ensuring no output before headers
+
+
+--
+
+
 VERSION 1.12
 01/19/25
 Plugin security too restrivtive. Updated for standard role access.
