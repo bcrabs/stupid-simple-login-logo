@@ -1,18 +1,17 @@
 <?php
 namespace SSLL;
 
-/**
- * Manages logo operations with enhanced security
- */
 final class Logo_Manager {
     private static $instance = null;
     private $security;
     private $cache_manager;
+    private $file_handler;
     private static $css_output = false;
     
     private function __construct() {
         $this->security = Security::get_instance();
         $this->cache_manager = Cache_Manager::get_instance();
+        $this->file_handler = File_Handler::get_instance();
     }
     
     private function __clone() {}
@@ -28,27 +27,15 @@ final class Logo_Manager {
     }
     
     public function init() {
-        // Only add filters if we're on the login page
         if ($this->is_login_page()) {
             add_action('login_enqueue_scripts', [$this, 'modify_login_logo'], 10);
             add_filter('login_headerurl', [$this, 'modify_login_url'], 10);
             add_filter('login_headertext', [$this, 'modify_login_title'], 10);
         }
-        
-        // Add security headers
-        add_action('send_headers', [$this, 'add_security_headers'], 1);
     }
     
     private function is_login_page() {
         return in_array($GLOBALS['pagenow'], ['wp-login.php', 'wp-register.php'], true);
-    }
-    
-    public function add_security_headers() {
-        if ($this->is_login_page()) {
-            header('X-Content-Type-Options: nosniff');
-            header('X-Frame-Options: SAMEORIGIN');
-            header('Content-Security-Policy: default-src \'self\'; img-src \'self\' data: https:; style-src \'self\' \'unsafe-inline\'');
-        }
     }
     
     public function setup() {
@@ -70,7 +57,6 @@ final class Logo_Manager {
             return;
         }
         
-        // Verify URL again before output
         if (!$this->security->validate_image_url($logo_url)) {
             $this->cache_manager->clear_logo_cache();
             return;
@@ -106,7 +92,6 @@ final class Logo_Manager {
             return new \WP_Error('unauthorized', __('Unauthorized access', 'ssll-for-wp'));
         }
         
-        // Additional URL validation
         $url = esc_url_raw($url);
         if (empty($url)) {
             return new \WP_Error('invalid_url', __('Invalid URL provided', 'ssll-for-wp'));
@@ -116,7 +101,6 @@ final class Logo_Manager {
             return new \WP_Error('invalid_url', __('Invalid image URL or file type', 'ssll-for-wp'));
         }
         
-        // Verify file size
         $attachment_id = attachment_url_to_postid($url);
         if ($attachment_id) {
             $file_path = get_attached_file($attachment_id);
@@ -144,6 +128,7 @@ final class Logo_Manager {
     public function cleanup() {
         if ($this->security->has_capability('manage_options')) {
             $this->cache_manager->cleanup();
+            $this->file_handler->cleanup();
         }
     }
     

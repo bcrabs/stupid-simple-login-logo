@@ -1,9 +1,6 @@
 <?php
 namespace SSLL;
 
-/**
- * Security management class
- */
 final class Security {
     private static $instance = null;
     private static $valid_mime_types = [
@@ -13,23 +10,12 @@ final class Security {
     
     private static $rate_limited_actions = [
         'ssll_save_logo',
-        'ssll_remove_logo'
+        'ssll_remove_logo',
+        'ssll_activate_license'
     ];
     
-    // Whitelist of allowed domains for image URLs
-    private static $allowed_domains = [];
-    
-    private function __construct() {
-        // Initialize allowed domains from site URL
-        $site_url = parse_url(get_site_url(), PHP_URL_HOST);
-        self::$allowed_domains = [
-            $site_url,
-            'www.' . $site_url
-        ];
-    }
-    
+    private function __construct() {}
     private function __clone() {}
-    
     public function __wakeup() {
         throw new \Exception('Unserialize is not allowed.');
     }
@@ -46,12 +32,10 @@ final class Security {
     }
     
     public function init_security() {
-        // Add security headers early
         if (!headers_sent()) {
             add_action('send_headers', [$this, 'add_security_headers'], 1);
         }
         
-        // Only add hooks for admin actions
         if (!is_admin()) {
             return;
         }
@@ -60,7 +44,7 @@ final class Security {
             add_action("admin_post_{$action}", [$this, 'check_rate_limit'], 5);
         }
     }
-
+    
     public function add_security_headers() {
         if (headers_sent()) {
             return;
@@ -71,13 +55,12 @@ final class Security {
         header('X-XSS-Protection: 1; mode=block');
         header('Referrer-Policy: strict-origin-when-cross-origin');
         
-        // Add CSP only on plugin pages
         if (isset($_GET['page']) && $_GET['page'] === 'stupid-simple-login-logo') {
             header("Content-Security-Policy: default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline';");
         }
     }
     
-    private function validate_mime_type($file_path) {
+    public function validate_mime_type($file_path) {
         // Try wp_check_filetype first
         $wp_check = wp_check_filetype($file_path);
         if (!empty($wp_check['type']) && isset(self::$valid_mime_types[$wp_check['type']])) {
@@ -102,63 +85,6 @@ final class Security {
         }
 
         return false;
-    }
-
-    public function validate_image_url($url) {
-        static $validated = [];
-        
-        if (isset($validated[$url])) {
-            return $validated[$url];
-        }
-        
-        // Basic sanitization
-        $url = esc_url_raw($url);
-        
-        // Parse URL
-        $parsed_url = wp_parse_url($url);
-        if (false === $parsed_url || !isset($parsed_url['host'])) {
-            $validated[$url] = false;
-            return false;
-        }
-        
-        // Domain validation
-        if (!in_array($parsed_url['host'], self::$allowed_domains, true)) {
-            $validated[$url] = false;
-            return false;
-        }
-        
-        // Verify file exists in Media Library
-        $attachment_id = attachment_url_to_postid($url);
-        if (!$attachment_id) {
-            $validated[$url] = false;
-            return false;
-        }
-        
-        // Additional file validation
-        $file_path = get_attached_file($attachment_id);
-        if (!$file_path || !file_exists($file_path)) {
-            $validated[$url] = false;
-            return false;
-        }
-        
-        // Validate MIME type using our custom method
-        $mime_type = $this->validate_mime_type($file_path);
-        if (!$mime_type) {
-            $validated[$url] = false;
-            return false;
-        }
-        
-        // Path traversal protection
-        $normalized_path = realpath($file_path);
-        $uploads_dir = realpath(wp_upload_dir()['basedir']);
-        
-        if (!$normalized_path || !$uploads_dir || strpos($normalized_path, $uploads_dir) !== 0) {
-            $validated[$url] = false;
-            return false;
-        }
-        
-        $validated[$url] = true;
-        return true;
     }
     
     public function check_rate_limit() {
@@ -219,15 +145,13 @@ final class Security {
             return $ip;
         }
         
-        // Prefer REMOTE_ADDR as it can't be spoofed
         if (!empty($_SERVER['REMOTE_ADDR'])) {
             $ip = $_SERVER['REMOTE_ADDR'];
         } elseif (defined('SSLL_TRUSTED_PROXY') && SSLL_TRUSTED_PROXY) {
-            // Only check proxy headers if we trust the proxy
             $headers = [
-                'HTTP_CF_CONNECTING_IP', // Cloudflare
-                'HTTP_X_REAL_IP',       // Nginx
-                'HTTP_X_FORWARDED_FOR'  // Standard proxy
+                'HTTP_CF_CONNECTING_IP',
+                'HTTP_X_REAL_IP',
+                'HTTP_X_FORWARDED_FOR'
             ];
             
             foreach ($headers as $header) {
@@ -288,6 +212,39 @@ final class Security {
         return true;
     }
     
+    public function sanitize_image_url($url) {
+        $url = esc_url_raw($url);
+        if (empty($url)) {
+            return false;
+        }
+        
+        $parsed_url = wp_parse_url($url);
+        if (false === $parsed_url || !isset($parsed_url['host'])) {
+            return false;
+        }
+        
+        $site_url = wp_parse_url(site_url());
+        if ($parsed_url['host'] !== $site_url['host']) {
+            return false;
+        }
+        
+        return $url;
+    }
+    
+    public function sanitize_file_path($path) {
+        $path = str_replace('\\', '/', $path);
+        $path = preg_replace('/\.+\//', '', $path);
+        
+        $real_path = realpath($path);
+        $upload_path = realpath(wp_upload_dir()['basedir']);
+        
+        if (!$real_path || !$upload_path || strpos($real_path, $upload_path) !== 0) {
+            return false;
+        }
+        
+        return $real_path;
+    }
+    
     private function log_security_event($message, $context = []) {
         if (defined('WP_DEBUG') && WP_DEBUG) {
             error_log(sprintf(
@@ -296,17 +253,6 @@ final class Security {
                 wp_json_encode($context)
             ));
         }
-    }
-    
-    public function sanitize_option_value($value) {
-        if (is_string($value)) {
-            // Remove potential PHP serialized objects
-            if (preg_match('/^[OoNnRr]:\d+:"/', $value)) {
-                return '';
-            }
-            return sanitize_text_field($value);
-        }
-        return $value;
     }
     
     public function cleanup() {

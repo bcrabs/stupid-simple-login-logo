@@ -1,7 +1,7 @@
-Version: 1.14.1
+Version: 1.15
 Requires at least: 5.0
 Requires PHP: 5.6
-Stable: 1.14.1
+Stable: 1.15
 Author: CRFTD
 Author URI: https://crftd.dev
 Update URI: https://github.com/crftddev/stupid-simple-login-logo
