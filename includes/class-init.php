@@ -1,14 +1,12 @@
 <?php
 namespace SSLL;
 
-/**
- * Main initialization class for the plugin
- */
 final class Init {
     private static $instance = null;
     private $modules = [];
     private static $required_files = [
         'class-security.php',
+        'class-file-handler.php',
         'class-cache-manager.php',
         'class-logo-manager.php',
         'class-admin.php'
@@ -18,7 +16,8 @@ final class Init {
     private function __clone() {}
     public function __wakeup() {
         throw new \Exception('Unserialize is not allowed.');
-    }    
+    }
+    
     public static function get_instance() {
         if (null === self::$instance) {
             self::$instance = new self();
@@ -35,6 +34,7 @@ final class Init {
         $this->load_dependencies();
         $this->init_modules();
         $this->setup_hooks();
+        $this->init_license_handler();
     }
     
     private function check_requirements() {
@@ -59,6 +59,7 @@ final class Init {
         try {
             $this->modules = [
                 'security' => Security::get_instance(),
+                'file_handler' => File_Handler::get_instance(),
                 'cache_manager' => Cache_Manager::get_instance(),
                 'logo_manager' => Logo_Manager::get_instance(),
                 'admin' => Admin::get_instance()
@@ -78,6 +79,23 @@ final class Init {
         }
     }
     
+    private function init_license_handler() {
+        $client = ssll_get_appsero_client();
+        if ($client && !get_option('ssll_license_activated', false)) {
+            add_action('admin_notices', function() {
+                if (!current_user_can('manage_options')) {
+                    return;
+                }
+                printf(
+                    '<div class="notice notice-warning is-dismissible"><p>%s <a href="%s">%s</a></p></div>',
+                    esc_html__('Please activate your license for Stupid Simple Login Logo to receive updates and support.', 'ssll-for-wp'),
+                    esc_url(admin_url('options-general.php?page=stupid-simple-login-logo#license')),
+                    esc_html__('Activate License', 'ssll-for-wp')
+                );
+            });
+        }
+    }
+    
     public function init_module_functionality() {
         array_walk($this->modules, function($module) {
             if (method_exists($module, 'init')) {
@@ -89,44 +107,10 @@ final class Init {
     private function setup_hooks() {
         register_activation_hook(SSLL_FILE, [$this, 'activate']);
         register_deactivation_hook(SSLL_FILE, [$this, 'deactivate']);
-        
-        if (!is_admin()) {
-            return;
-        }
-        
         add_action('init', [$this, 'load_textdomain'], 0);
         
         if (function_exists('register_uninstall_hook')) {
             register_uninstall_hook(SSLL_FILE, [__CLASS__, 'uninstall']);
-        }
-    }
-    
-    public function show_requirement_errors() {
-        global $wp_version;
-        
-        $errors = [];
-        
-        if (version_compare(PHP_VERSION, SSLL_MIN_PHP, '<')) {
-            $errors[] = sprintf(
-                /* translators: %s: Minimum PHP version */
-                esc_html__('Stupid Simple Login Logo requires PHP version %s or higher.', 'ssll-for-wp'),
-                SSLL_MIN_PHP
-            );
-        }
-        
-        if (version_compare($wp_version, SSLL_MIN_WP, '<')) {
-            $errors[] = sprintf(
-                /* translators: %s: Minimum WordPress version */
-                esc_html__('Stupid Simple Login Logo requires WordPress version %s or higher.', 'ssll-for-wp'),
-                SSLL_MIN_WP
-            );
-        }
-        
-        if (!empty($errors)) {
-            printf(
-                '<div class="error"><p>%s</p></div>',
-                implode('</p><p>', array_map('esc_html', $errors))
-            );
         }
     }
     
@@ -136,12 +120,15 @@ final class Init {
         }
         
         try {
-            if (isset($this->modules['logo_manager'])) {
-                $this->modules['logo_manager']->setup();
+            foreach ($this->modules as $module) {
+                if (method_exists($module, 'setup')) {
+                    $module->setup();
+                }
             }
             
-            if (isset($this->modules['security'])) {
-                $this->modules['security']->init_security();
+            $client = ssll_get_appsero_client();
+            if ($client) {
+                $client->activate();
             }
             
             flush_rewrite_rules();
@@ -161,11 +148,16 @@ final class Init {
             return;
         }
         
-        array_walk($this->modules, function($module) {
+        foreach ($this->modules as $module) {
             if (method_exists($module, 'cleanup')) {
                 $module->cleanup();
             }
-        });
+        }
+        
+        $client = ssll_get_appsero_client();
+        if ($client) {
+            $client->deactivate();
+        }
         
         flush_rewrite_rules();
     }
@@ -176,11 +168,15 @@ final class Init {
         }
         
         $instance = self::get_instance();
-        array_walk($instance->modules, function($module) {
+        foreach ($instance->modules as $module) {
             if (method_exists($module, 'uninstall')) {
                 $module->uninstall();
             }
-        });
+        }
+        
+        delete_option('ssll_license_key');
+        delete_option('ssll_license_status');
+        delete_option('ssll_license_activated');
     }
     
     public function load_textdomain() {
@@ -193,6 +189,33 @@ final class Init {
                 dirname(SSLL_BASENAME) . '/languages'
             );
             $loaded = true;
+        }
+    }
+    
+    public function show_requirement_errors() {
+        global $wp_version;
+        
+        $errors = [];
+        
+        if (version_compare(PHP_VERSION, SSLL_MIN_PHP, '<')) {
+            $errors[] = sprintf(
+                esc_html__('Stupid Simple Login Logo requires PHP version %s or higher.', 'ssll-for-wp'),
+                SSLL_MIN_PHP
+            );
+        }
+        
+        if (version_compare($wp_version, SSLL_MIN_WP, '<')) {
+            $errors[] = sprintf(
+                esc_html__('Stupid Simple Login Logo requires WordPress version %s or higher.', 'ssll-for-wp'),
+                SSLL_MIN_WP
+            );
+        }
+        
+        if (!empty($errors)) {
+            printf(
+                '<div class="error"><p>%s</p></div>',
+                implode('</p><p>', array_map('esc_html', $errors))
+            );
         }
     }
 }

@@ -8,13 +8,12 @@
         return;
     }
 
-    // Cache DOM elements
+    var mediaUploader = null;
     var $preview = $('#logo_preview');
     var $logoUrl = $('#logo_url');
     var $uploadButton = $('#upload_logo_button');
     var $removeButton = $('#remove_logo_button');
     var $saveButton = $('#submit');
-    var mediaUploader = null;
     
     function updateImagePreview(url) {
         if (!url) {

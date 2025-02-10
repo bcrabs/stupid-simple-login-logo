@@ -2,7 +2,7 @@
 namespace SSLL;
 
 /**
- * Handles all file operations
+ * Handles file operations
  */
 final class File_Handler {
     private static $instance = null;
@@ -15,7 +15,9 @@ final class File_Handler {
     }
     
     private function __clone() {}
-    private function __wakeup() {}
+    public function __wakeup() {
+        throw new \Exception('Unserialize is not allowed.');
+    }
     
     public static function get_instance() {
         if (null === self::$instance) {
@@ -25,13 +27,13 @@ final class File_Handler {
     }
     
     public function init() {
-        add_action('template_redirect', array($this, 'handle_logo_request'));
-        add_action('init', array($this, 'add_rewrite_rules'));
-        add_filter('query_vars', array($this, 'add_query_vars'));
+        add_action('template_redirect', [$this, 'handle_logo_request']);
+        add_action('init', [$this, 'add_rewrite_rules']);
+        add_filter('query_vars', [$this, 'add_query_vars']);
     }
     
     public function create_directories() {
-        $dirs = array('js', 'languages');
+        $dirs = ['js', 'languages'];
         
         foreach ($dirs as $dir) {
             $path = SSLL_PATH . $dir;
@@ -46,16 +48,10 @@ final class File_Handler {
                     );
                 }
                 
-                // Create .htaccess with correct MIME types
+                // Create .htaccess to prevent direct access
                 $htaccess = $path . '/.htaccess';
                 if (!file_exists($htaccess)) {
-                    $content = "AddType application/javascript .js\n";
-                    $content .= "Order deny,allow\n";
-                    $content .= "Deny from all\n";
-                    $content .= "<FilesMatch \"\.js$\">\n";
-                    $content .= "    Allow from all\n";
-                    $content .= "</FilesMatch>";
-                    
+                    $content = "Order deny,allow\nDeny from all";
                     if (!@file_put_contents($htaccess, $content)) {
                         throw new \Exception(
                             sprintf(
@@ -66,30 +62,6 @@ final class File_Handler {
                         );
                     }
                 }
-            }
-        }
-        
-        // Create JS file
-        $this->create_js_file();
-    }
-    
-    private function create_js_file() {
-        // Get WP Filesystem
-        require_once ABSPATH . 'wp-admin/includes/file.php';
-        WP_Filesystem();
-        global $wp_filesystem;
-        
-        $js_file = SSLL_PATH . 'js/media-upload.js';
-        if (!$wp_filesystem->exists($js_file)) {
-            $js_content = $this->get_js_content();
-            if (!$wp_filesystem->put_contents($js_file, $js_content, FS_CHMOD_FILE)) {
-                throw new \Exception(
-                    sprintf(
-                        /* translators: %s: File path */
-                        __('Unable to create JavaScript file: %s', 'ssll-for-wp'),
-                        esc_html($js_file)
-                    )
-                );
             }
         }
     }
@@ -114,11 +86,8 @@ final class File_Handler {
         }
         
         try {
-            // Verify rate limit and access
-            $this->security->check_rate_limit();
-            
             if (!is_user_logged_in() && 
-                !in_array($GLOBALS['pagenow'], array('wp-login.php', 'wp-register.php'), true)) {
+                !in_array($GLOBALS['pagenow'], ['wp-login.php', 'wp-register.php'], true)) {
                 throw new \Exception(__('Unauthorized access', 'ssll-for-wp'));
             }
             
@@ -132,23 +101,18 @@ final class File_Handler {
                 throw new \Exception(__('Invalid file location', 'ssll-for-wp'));
             }
             
-            $mime_type = $this->security->validate_mime_type($file_path);
-            if (!$mime_type) {
-                throw new \Exception(__('Invalid file type', 'ssll-for-wp'));
-            }
-            
-            $this->serve_file($file_path, $mime_type);
+            $this->serve_file($file_path);
             
         } catch (\Exception $e) {
             wp_die(
                 esc_html($e->getMessage()),
                 esc_html__('Error', 'ssll-for-wp'),
-                array('response' => 403)
+                ['response' => 403]
             );
         }
     }
     
-    private function serve_file($file_path, $mime_type) {
+    private function serve_file($file_path) {
         $file_size = filesize($file_path);
         if ($file_size === false || $file_size > SSLL_MAX_FILE_SIZE) {
             throw new \Exception(__('Invalid file size', 'ssll-for-wp'));
@@ -168,6 +132,11 @@ final class File_Handler {
         }
         
         // Set headers
+        $mime_type = $this->security->validate_mime_type($file_path);
+        if (!$mime_type) {
+            throw new \Exception(__('Invalid file type', 'ssll-for-wp'));
+        }
+        
         header('Content-Type: ' . $mime_type);
         header('Content-Length: ' . $file_size);
         header('ETag: ' . $etag);
@@ -176,7 +145,7 @@ final class File_Handler {
         header('Cache-Control: public, max-age=31536000');
         header('Expires: ' . gmdate('D, d M Y H:i:s T', time() + 31536000));
         
-        // Check for X-Sendfile capability
+        // Use X-Sendfile if available
         if (function_exists('apache_get_modules') && in_array('mod_xsendfile', apache_get_modules(), true)) {
             header('X-Sendfile: ' . $file_path);
             exit;
@@ -187,12 +156,8 @@ final class File_Handler {
     }
     
     private function send_file_php($file_path) {
-        // Set time limit and memory limit for large files
         set_time_limit(300);
-        $memory_limit = ini_get('memory_limit');
-        if (intval($memory_limit) < 64) {
-            ini_set('memory_limit', '64M');
-        }
+        $chunk_size = SSLL_CHUNK_SIZE;
         
         $handle = @fopen($file_path, 'rb');
         if ($handle === false) {
@@ -201,7 +166,7 @@ final class File_Handler {
         
         try {
             while (!feof($handle)) {
-                $buffer = fread($handle, SSLL_CHUNK_SIZE);
+                $buffer = fread($handle, $chunk_size);
                 if ($buffer === false) {
                     throw new \Exception(__('Error reading file', 'ssll-for-wp'));
                 }
@@ -212,73 +177,6 @@ final class File_Handler {
             fclose($handle);
         }
         exit;
-    }
-    
-    private function get_js_content() {
-        return <<<'EOT'
-jQuery(document).ready(function($) {
-    var mediaUploader;
-    var nonce = $('#ssll_nonce').val();
-    
-    $('#upload_logo_button').click(function(e) {
-        e.preventDefault();
-        
-        if (!nonce) {
-            console.error('Security token not found');
-            return;
-        }
-        
-        if (mediaUploader) {
-            mediaUploader.open();
-            return;
-        }
-        
-        mediaUploader = wp.media({
-            title: ssllTranslations.chooseImage,
-            button: {
-                text: ssllTranslations.selectImage
-            },
-            multiple: false,
-            library: {
-                type: 'image'
-            }
-        });
-        
-        mediaUploader.on('select', function() {
-            var attachment = mediaUploader.state().get('selection').first().toJSON();
-            
-            // Validate file type
-            if (!attachment.mime.match(/^image\/(jpeg|png)$/)) {
-                alert(ssllTranslations.invalidType);
-                return;
-            }
-            
-            // Validate file size (5MB limit)
-            if (attachment.size > 5242880) {
-                alert(ssllTranslations.fileTooBig);
-                return;
-            }
-            
-            $('#logo_url').val(attachment.url);
-            $('#logo_preview').attr('src', attachment.url).show();
-            $('#remove_logo_button').show();
-        });
-        
-        mediaUploader.open();
-    });
-    
-    $('#remove_logo_button').click(function(e) {
-        e.preventDefault();
-        if (!nonce) {
-            console.error('Security token not found');
-            return;
-        }
-        $('#logo_url').val('');
-        $('#logo_preview').attr('src', '').hide();
-        $(this).hide();
-    });
-});
-EOT;
     }
     
     public function cleanup() {

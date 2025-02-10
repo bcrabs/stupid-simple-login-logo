@@ -1,3 +1,9 @@
+VERSION 1.15
+AppSero Integration for updates and code cleanup.
+
+
+--
+
 VERSION 1.14
 AppSero Integration for tracking and analytics.
 

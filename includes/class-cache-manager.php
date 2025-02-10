@@ -1,9 +1,6 @@
 <?php
 namespace SSLL;
 
-/**
- * Manages plugin caching operations with enhanced security
- */
 final class Cache_Manager {
     private static $instance = null;
     private $security;
@@ -27,7 +24,6 @@ final class Cache_Manager {
     
     private function get_cache_key($base) {
         if (!isset(self::$cache_keys[$base])) {
-            // Add random salt to prevent cache poisoning
             $salt = wp_hash(random_bytes(16));
             self::$cache_keys[$base] = sprintf(
                 '%s_%s_%s',
@@ -40,14 +36,12 @@ final class Cache_Manager {
     }
     
     public function get_logo_url() {
-        // Early return if no capability
         if (!is_user_logged_in() && !in_array($GLOBALS['pagenow'], ['wp-login.php', 'wp-register.php'], true)) {
             return '';
         }
         
         $cache_key = $this->get_cache_key('ssll_logo_url');
         
-        // Try object cache first
         $cached_url = wp_cache_get($cache_key, SSLL_CACHE_GROUP);
         if (false !== $cached_url) {
             if (empty($cached_url) || $this->security->validate_image_url($cached_url)) {
@@ -56,19 +50,16 @@ final class Cache_Manager {
             $this->clear_logo_cache();
         }
         
-        // Get from options and validate
         $logo_url = get_option('ssll_login_logo_url', '');
         if (!empty($logo_url)) {
-            $logo_url = $this->security->sanitize_option_value($logo_url);
+            $logo_url = $this->security->sanitize_image_url($logo_url);
             if ($this->security->validate_image_url($logo_url)) {
                 wp_cache_set($cache_key, $logo_url, SSLL_CACHE_GROUP, HOUR_IN_SECONDS);
                 return $logo_url;
             }
-            // Invalid URL in options, clean it up
             delete_option('ssll_login_logo_url');
         }
         
-        // Cache empty result to prevent repeated lookups
         wp_cache_set($cache_key, '', SSLL_CACHE_GROUP, HOUR_IN_SECONDS);
         return '';
     }
@@ -85,13 +76,11 @@ final class Cache_Manager {
             return true;
         }
         
-        // Sanitize and validate URL
-        $url = $this->security->sanitize_option_value($url);
+        $url = $this->security->sanitize_image_url($url);
         if (!$this->security->validate_image_url($url)) {
             return false;
         }
         
-        // Update option with autoload enabled for performance
         $updated = update_option('ssll_login_logo_url', $url, 'yes');
         if ($updated) {
             $cache_key = $this->get_cache_key('ssll_logo_url');
@@ -111,12 +100,10 @@ final class Cache_Manager {
             return;
         }
         
-        // Clean all cache keys
         array_walk(self::$cache_keys, function($key) {
             wp_cache_delete($key, SSLL_CACHE_GROUP);
         });
         
-        // Clean transients securely
         global $wpdb;
         $wpdb->query($wpdb->prepare(
             "DELETE FROM {$wpdb->options} 
