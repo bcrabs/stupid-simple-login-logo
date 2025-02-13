@@ -32,7 +32,6 @@ final class Admin {
         add_action('admin_menu', [$this, 'add_admin_menu']);
         add_action('admin_post_ssll_save_logo', [$this, 'handle_save_logo']);
         add_action('admin_post_ssll_remove_logo', [$this, 'handle_remove_logo']);
-        add_action('admin_post_ssll_activate_license', [$this, 'handle_license_activation']);
     }
     
     public function add_admin_menu() {
@@ -76,15 +75,6 @@ final class Admin {
                 esc_html__('Choose an image from your Media Library to replace the default WordPress logo on the login page.', 'ssll-for-wp')
             )
         ]);
-        
-        $screen->add_help_tab([
-            'id'       => 'ssll_help_license',
-            'title'    => __('License', 'ssll-for-wp'),
-            'content'  => sprintf(
-                '<p>%s</p>',
-                esc_html__('Enter your license key to receive plugin updates and support.', 'ssll-for-wp')
-            )
-        ]);
     }
     
     public function enqueue_assets($hook) {
@@ -119,52 +109,6 @@ final class Admin {
                 ]
             ]
         );
-    }
-    
-    public function handle_license_activation() {
-        if (!$this->security->verify_user_capability('manage_options')) {
-            return;
-        }
-        
-        check_admin_referer('ssll_activate_license');
-        
-        $license_key = isset($_POST['license_key']) ? sanitize_text_field($_POST['license_key']) : '';
-        if (empty($license_key)) {
-            wp_redirect(add_query_arg(
-                ['page' => 'stupid-simple-login-logo', 'error' => 'empty_license'],
-                admin_url('options-general.php')
-            ));
-            exit;
-        }
-        
-        $client = ssll_get_appsero_client();
-        if (!$client) {
-            wp_redirect(add_query_arg(
-                ['page' => 'stupid-simple-login-logo', 'error' => 'client_error'],
-                admin_url('options-general.php')
-            ));
-            exit;
-        }
-        
-        $activation = $client->license()->activate($license_key);
-        
-        if ($activation->success) {
-            update_option('ssll_license_key', $license_key);
-            update_option('ssll_license_status', 'active');
-            update_option('ssll_license_activated', true);
-            
-            wp_redirect(add_query_arg(
-                ['page' => 'stupid-simple-login-logo', 'license' => 'activated'],
-                admin_url('options-general.php')
-            ));
-            exit;
-        }
-        
-        wp_redirect(add_query_arg(
-            ['page' => 'stupid-simple-login-logo', 'error' => 'invalid_license'],
-            admin_url('options-general.php')
-        ));
-        exit;
     }
     
     public function handle_save_logo() {
@@ -232,52 +176,6 @@ final class Admin {
         exit;
     }
     
-    private function render_license_section() {
-        $license_key = get_option('ssll_license_key', '');
-        $license_status = get_option('ssll_license_status', '');
-        ?>
-        <div class="ssll-license-section">
-            <h2><?php esc_html_e('License', 'ssll-for-wp'); ?></h2>
-            
-            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-                <input type="hidden" name="action" value="ssll_activate_license">
-                <?php wp_nonce_field('ssll_activate_license'); ?>
-                
-                <table class="form-table">
-                    <tr>
-                        <th scope="row">
-                            <label for="license_key"><?php esc_html_e('License Key', 'ssll-for-wp'); ?></label>
-                        </th>
-                        <td>
-                            <input type="text" 
-                                   name="license_key" 
-                                   id="license_key"
-                                   value="<?php echo esc_attr($license_key); ?>"
-                                   class="regular-text"
-                                   <?php echo $license_status === 'active' ? 'disabled' : ''; ?>>
-                            
-                            <?php if ($license_status === 'active') : ?>
-                                <span class="dashicons dashicons-yes-alt" style="color: green;"></span>
-                                <span class="description">
-                                    <?php esc_html_e('License active', 'ssll-for-wp'); ?>
-                                </span>
-                            <?php else : ?>
-                                <p class="description">
-                                    <?php esc_html_e('Enter your license key to enable automatic updates.', 'ssll-for-wp'); ?>
-                                </p>
-                            <?php endif; ?>
-                        </td>
-                    </tr>
-                </table>
-                
-                <?php if ($license_status !== 'active') : ?>
-                    <?php submit_button(__('Activate License', 'ssll-for-wp')); ?>
-                <?php endif; ?>
-            </form>
-        </div>
-        <?php
-    }
-    
     public function render_settings_page() {
         if (!$this->security->has_capability('manage_options')) {
             wp_die(
@@ -288,27 +186,9 @@ final class Admin {
         }
         
         // Handle messages
-        if (isset($_GET['license'])) {
-            if ($_GET['license'] === 'activated') {
-                add_settings_error(
-                    'ssll_messages',
-                    'ssll_license_activated',
-                    __('License activated successfully.', 'ssll-for-wp'),
-                    'updated'
-                );
-            }
-        } elseif (isset($_GET['error'])) {
+        if (isset($_GET['error'])) {
             $error_message = '';
             switch ($_GET['error']) {
-                case 'empty_license':
-                    $error_message = __('Please enter a license key.', 'ssll-for-wp');
-                    break;
-                case 'invalid_license':
-                    $error_message = __('Invalid license key. Please try again.', 'ssll-for-wp');
-                    break;
-                case 'client_error':
-                    $error_message = __('Unable to verify license. Please try again later.', 'ssll-for-wp');
-                    break;
                 case 'no_logo':
                     $error_message = __('Please select a logo image.', 'ssll-for-wp');
                     break;
@@ -355,7 +235,6 @@ final class Admin {
             <?php settings_errors('ssll_messages'); ?>
             
             <div class="ssll-settings-wrapper">
-                <!-- Logo Settings Section -->
                 <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="ssll-logo-settings">
                     <div class="ssll-logo-preview" style="margin: 2em 0;">
                         <?php if (!empty($logo_url)) : ?>
@@ -419,9 +298,6 @@ final class Admin {
                         </a>
                     </div>
                 </form>
-                
-                <!-- License Section -->
-                <?php $this->render_license_section(); ?>
             </div>
         </div>
         <?php
