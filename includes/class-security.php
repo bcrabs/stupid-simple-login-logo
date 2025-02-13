@@ -10,8 +10,7 @@ final class Security {
     
     private static $rate_limited_actions = [
         'ssll_save_logo',
-        'ssll_remove_logo',
-        'ssll_activate_license'
+        'ssll_remove_logo'
     ];
     
     private function __construct() {}
@@ -61,13 +60,11 @@ final class Security {
     }
     
     public function validate_mime_type($file_path) {
-        // Try wp_check_filetype first
         $wp_check = wp_check_filetype($file_path);
         if (!empty($wp_check['type']) && isset(self::$valid_mime_types[$wp_check['type']])) {
             return $wp_check['type'];
         }
 
-        // Try mime_content_type if available
         if (function_exists('mime_content_type')) {
             $mime_type = mime_content_type($file_path);
             if ($mime_type && isset(self::$valid_mime_types[$mime_type])) {
@@ -75,7 +72,6 @@ final class Security {
             }
         }
 
-        // Use getimagesize as final fallback
         $image_info = @getimagesize($file_path);
         if ($image_info && isset($image_info['mime'])) {
             $mime_type = $image_info['mime'];
@@ -93,7 +89,6 @@ final class Security {
             return false;
         }
         
-        // Generate unique key with random salt
         $salt = wp_hash(random_bytes(8));
         $rate_key = 'ssll_rate_' . wp_hash($ip . $salt);
         
@@ -109,7 +104,6 @@ final class Security {
             return true;
         }
         
-        // Verify IP hasn't changed (prevent cache poisoning)
         if ($rate_data['ip'] !== $ip) {
             return false;
         }

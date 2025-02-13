@@ -34,7 +34,6 @@ final class Init {
         $this->load_dependencies();
         $this->init_modules();
         $this->setup_hooks();
-        $this->init_license_handler();
     }
     
     private function check_requirements() {
@@ -79,20 +78,13 @@ final class Init {
         }
     }
     
-    private function init_license_handler() {
-        $client = ssll_get_appsero_client();
-        if ($client && !get_option('ssll_license_activated', false)) {
-            add_action('admin_notices', function() {
-                if (!current_user_can('manage_options')) {
-                    return;
-                }
-                printf(
-                    '<div class="notice notice-warning is-dismissible"><p>%s <a href="%s">%s</a></p></div>',
-                    esc_html__('Please activate your license for Stupid Simple Login Logo to receive updates and support.', 'ssll-for-wp'),
-                    esc_url(admin_url('options-general.php?page=stupid-simple-login-logo#license')),
-                    esc_html__('Activate License', 'ssll-for-wp')
-                );
-            });
+    private function setup_hooks() {
+        register_activation_hook(SSLL_FILE, [$this, 'activate']);
+        register_deactivation_hook(SSLL_FILE, [$this, 'deactivate']);
+        add_action('init', [$this, 'load_textdomain'], 0);
+        
+        if (function_exists('register_uninstall_hook')) {
+            register_uninstall_hook(SSLL_FILE, [__CLASS__, 'uninstall']);
         }
     }
     
@@ -102,16 +94,6 @@ final class Init {
                 $module->init();
             }
         });
-    }
-    
-    private function setup_hooks() {
-        register_activation_hook(SSLL_FILE, [$this, 'activate']);
-        register_deactivation_hook(SSLL_FILE, [$this, 'deactivate']);
-        add_action('init', [$this, 'load_textdomain'], 0);
-        
-        if (function_exists('register_uninstall_hook')) {
-            register_uninstall_hook(SSLL_FILE, [__CLASS__, 'uninstall']);
-        }
     }
     
     public function activate() {
@@ -128,7 +110,7 @@ final class Init {
             
             $client = ssll_get_appsero_client();
             if ($client) {
-                $client->activate();
+                $client->insights();
             }
             
             flush_rewrite_rules();
@@ -154,11 +136,6 @@ final class Init {
             }
         }
         
-        $client = ssll_get_appsero_client();
-        if ($client) {
-            $client->deactivate();
-        }
-        
         flush_rewrite_rules();
     }
     
@@ -173,10 +150,6 @@ final class Init {
                 $module->uninstall();
             }
         }
-        
-        delete_option('ssll_license_key');
-        delete_option('ssll_license_status');
-        delete_option('ssll_license_activated');
     }
     
     public function load_textdomain() {

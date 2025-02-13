@@ -22,7 +22,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('SSLL_VERSION', '1.0.0');
+define('SSLL_VERSION', '1.15.1');
 define('SSLL_FILE', __FILE__);
 define('SSLL_PATH', plugin_dir_path(__FILE__));
 define('SSLL_URL', plugin_dir_url(__FILE__));
@@ -88,24 +88,8 @@ function ssll_init_insights() {
     ]);
 }
 
-/**
- * Initialize AppSero Updater
- */
-function ssll_init_updater() {
-    $client = ssll_get_appsero_client();
-    if (!$client) {
-        return;
-    }
-    
-    $client->updater([
-        'license_key' => get_option('ssll_license_key'),
-        'license_status' => get_option('ssll_license_status')
-    ]);
-}
-
 // Initialize AppSero components
 add_action('plugins_loaded', 'ssll_init_insights', 20);
-add_action('plugins_loaded', 'ssll_init_updater', 20);
 
 // Autoloader for SSLL namespace
 spl_autoload_register(function ($class) {
