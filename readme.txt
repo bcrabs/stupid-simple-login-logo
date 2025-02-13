@@ -1,4 +1,4 @@
-Version: 1.15
+Version: 1.15.1
 Requires at least: 5.0
 Requires PHP: 5.6
 Stable: 1.15
