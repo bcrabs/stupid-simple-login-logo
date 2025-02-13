@@ -1,24 +1,64 @@
 <?php
 namespace SSLL;
 
+if (!defined('ABSPATH')) {
+    exit('Direct access not permitted.');
+}
+
 final class Security {
+    /**
+     * Class instance.
+     *
+     * @var self|null
+     */
     private static $instance = null;
+
+    /**
+     * Valid image MIME types and their extensions.
+     *
+     * @var array
+     */
     private static $valid_mime_types = [
         'image/jpeg' => 'jpg|jpeg|jpe',
-        'image/png'  => 'png'
+        'image/png'  => 'png',
+        'image/gif'  => 'gif',
+        'image/webp' => 'webp'
     ];
     
+    /**
+     * Actions that should be rate limited.
+     *
+     * @var array
+     */
     private static $rate_limited_actions = [
         'ssll_save_logo',
         'ssll_remove_logo'
     ];
     
+    /**
+     * Private constructor to prevent direct instantiation.
+     */
     private function __construct() {}
+    
+    /**
+     * Prevent cloning of the instance.
+     */
     private function __clone() {}
+    
+    /**
+     * Prevent unserializing of the instance.
+     *
+     * @throws \Exception
+     */
     public function __wakeup() {
         throw new \Exception('Unserialize is not allowed.');
     }
     
+    /**
+     * Get the singleton instance.
+     *
+     * @return self
+     */
     public static function get_instance() {
         if (null === self::$instance) {
             self::$instance = new self();
@@ -26,10 +66,16 @@ final class Security {
         return self::$instance;
     }
     
+    /**
+     * Initialize security features.
+     */
     public function init() {
         add_action('init', [$this, 'init_security']);
     }
     
+    /**
+     * Initialize security headers and rate limiting.
+     */
     public function init_security() {
         if (!headers_sent()) {
             add_action('send_headers', [$this, 'add_security_headers'], 1);
@@ -44,6 +90,9 @@ final class Security {
         }
     }
     
+    /**
+     * Add security headers to responses.
+     */
     public function add_security_headers() {
         if (headers_sent()) {
             return;
@@ -59,7 +108,17 @@ final class Security {
         }
     }
     
+    /**
+     * Validate file MIME type.
+     *
+     * @param string $file_path Path to the file
+     * @return string|false MIME type if valid, false otherwise
+     */
     public function validate_mime_type($file_path) {
+        if (!file_exists($file_path) || !is_readable($file_path)) {
+            return false;
+        }
+
         $wp_check = wp_check_filetype($file_path);
         if (!empty($wp_check['type']) && isset(self::$valid_mime_types[$wp_check['type']])) {
             return $wp_check['type'];
@@ -83,13 +142,62 @@ final class Security {
         return false;
     }
     
+    /**
+     * Validate image URL including MIME type check.
+     *
+     * @param string $url The URL to validate
+     * @return bool
+     */
+    public function validate_image_url($url) {
+        // First sanitize the URL
+        $url = $this->sanitize_image_url($url);
+        if (!$url) {
+            return false;
+        }
+
+        // For local Media Library images
+        $attachment_id = attachment_url_to_postid($url);
+        if ($attachment_id) {
+            $mime_type = get_post_mime_type($attachment_id);
+            if (!isset(self::$valid_mime_types[$mime_type])) {
+                return false;
+            }
+
+            $file_path = get_attached_file($attachment_id);
+            if (!$file_path || !$this->validate_mime_type($file_path)) {
+                return false;
+            }
+
+            return true;
+        }
+
+        // For external URLs
+        $headers = wp_get_http_headers($url);
+        if (!$headers || !isset($headers['content-type'])) {
+            return false;
+        }
+
+        $mime_type = $headers['content-type'];
+        // Strip charset if present
+        if (strpos($mime_type, ';') !== false) {
+            $mime_type = trim(strstr($mime_type, ';', true));
+        }
+
+        return isset(self::$valid_mime_types[$mime_type]);
+    }
+    
+    /**
+     * Check rate limiting for actions.
+     *
+     * @return bool
+     */
     public function check_rate_limit() {
         $ip = $this->get_client_ip();
         if (empty($ip)) {
             return false;
         }
         
-        $salt = wp_hash(random_bytes(8));
+        $salt = wp_hash(random_bytes(32));
         $rate_key = 'ssll_rate_' . wp_hash($ip . $salt);
         
         $rate_data = get_transient($rate_key);
@@ -132,6 +240,11 @@ final class Security {
         return true;
     }
     
+    /**
+     * Get client IP address.
+     *
+     * @return string
+     */
     private function get_client_ip() {
         static $ip = null;
         
@@ -163,6 +276,13 @@ final class Security {
         return filter_var($ip ?? '', FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) ?: '';
     }
     
+    /**
+     * Verify nonce.
+     *
+     * @param string $nonce Nonce to verify
+     * @param string $action Action name
+     * @return bool|\WP_Error
+     */
     public function verify_nonce($nonce, $action) {
         if (!wp_verify_nonce($nonce, $action)) {
             $this->log_security_event('Invalid nonce', [
@@ -179,6 +299,12 @@ final class Security {
         return true;
     }
     
+    /**
+     * Check if user has capability.
+     *
+     * @param string $capability Capability to check
+     * @return bool
+     */
     public function has_capability($capability = 'manage_options') {
         static $caps = [];
         
@@ -189,6 +315,12 @@ final class Security {
         return $caps[$capability];
     }
     
+    /**
+     * Verify user capability.
+     *
+     * @param string $capability Capability to verify
+     * @return bool|\WP_Error
+     */
     public function verify_user_capability($capability = 'manage_options') {
         if (!$this->has_capability($capability)) {
             $this->log_security_event('Unauthorized access attempt', [
@@ -206,6 +338,12 @@ final class Security {
         return true;
     }
     
+    /**
+     * Sanitize image URL.
+     *
+     * @param string $url URL to sanitize
+     * @return string|false
+     */
     public function sanitize_image_url($url) {
         $url = esc_url_raw($url);
         if (empty($url)) {
@@ -224,7 +362,31 @@ final class Security {
         
         return $url;
     }
+
+    /**
+     * Sanitize option value.
+     *
+     * @param mixed $value Value to sanitize
+     * @return mixed
+     */
+    public function sanitize_option_value($value) {
+        if (is_array($value)) {
+            return array_map([$this, 'sanitize_option_value'], $value);
+        }
+        
+        if (is_string($value)) {
+            return sanitize_text_field($value);
+        }
+        
+        return $value;
+    }
     
+    /**
+     * Sanitize file path.
+     *
+     * @param string $path Path to sanitize
+     * @return string|false
+     */
     public function sanitize_file_path($path) {
         $path = str_replace('\\', '/', $path);
         $path = preg_replace('/\.+\//', '', $path);
@@ -239,6 +401,12 @@ final class Security {
         return $real_path;
     }
     
+    /**
+     * Log security events.
+     *
+     * @param string $message Event message
+     * @param array $context Event context
+     */
     private function log_security_event($message, $context = []) {
         if (defined('WP_DEBUG') && WP_DEBUG) {
             error_log(sprintf(
@@ -249,6 +417,9 @@ final class Security {
         }
     }
     
+    /**
+     * Clean up security-related data.
+     */
     public function cleanup() {
         global $wpdb;
         
@@ -259,6 +430,9 @@ final class Security {
         ));
     }
     
+    /**
+     * Uninstall security-related data.
+     */
     public function uninstall() {
         $this->cleanup();
     }
