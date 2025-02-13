@@ -3,7 +3,7 @@
  * Plugin Name: Stupid Simple Login Logo
  * Plugin URI: https://github.com/crftddev/stupid-simple-login-logo
  * Description: Allows administrators to change the WordPress login page logo.
- * Version: 1.15
+ * Version: 1.15.1
  * Requires at least: 5.0
  * Requires PHP: 5.6
  * Author: CRFTD
