@@ -65,31 +65,48 @@ function ssll_get_appsero_client() {
 }
 
 /**
- * Initialize AppSero Insights
+ * Initialize AppSero Insights.
+ *
+ * @return void
  */
 function ssll_init_insights() {
-    $client = ssll_get_appsero_client();
-    if (!$client) {
-        return;
+    try {
+        // Get AppSero client instance
+        $client = ssll_get_appsero_client();
+        if (!$client) {
+            return;
+        }
+
+        // Initialize insights
+        $insights = $client->insights();
+        
+        // Add filter to skip sensitive options from tracking
+        add_filter('appsero_track_skip_options', function($skip_options) {
+            $skip_options[] = 'ssll_login_logo_url';
+            $skip_options[] = 'ssll_version';
+            return $skip_options;
+        });
+        
+        // Initialize with proper configuration
+        $insights->init([
+            'collect_email' => false,
+            'disable_tracking' => apply_filters('ssll_disable_tracking', false),
+            'notice' => true,
+            'notice_text' => __('Help improve Stupid Simple Login Logo by sharing non-sensitive usage data.', 'ssll-for-wp'),
+            'notice_dismiss_forever' => true
+        ]);
+        
+    } catch (\Exception $e) {
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('SSLL AppSero Init Error: ' . $e->getMessage());
+        }
     }
-    
-    $insights = $client->insights();
-    
-    add_filter('appsero_track_skip_options', function($skip_options) {
-        $skip_options[] = 'ssll_login_logo_url';
-        return $skip_options;
-    });
-    
-    $insights->init([
-        'collect_email' => false,
-        'disable_tracking' => false,
-        'notice' => true,
-        'notice_text' => __('Help improve Stupid Simple Login Logo by sharing non-sensitive usage data.', 'ssll-for-wp')
-    ]);
 }
 
 // Initialize AppSero components
-add_action('plugins_loaded', 'ssll_init_insights', 20);
+if (is_admin()) {
+    add_action('plugins_loaded', 'SSLL\\ssll_init_insights', 20);
+}
 
 // Autoloader for SSLL namespace
 spl_autoload_register(function ($class) {
