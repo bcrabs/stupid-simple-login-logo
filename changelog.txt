@@ -1,3 +1,8 @@
+VERSION 1.15.5
+Ditching AppSero.
+
+
+--
 VERSION 1.15.2
 AppSero Insights fix.
 
