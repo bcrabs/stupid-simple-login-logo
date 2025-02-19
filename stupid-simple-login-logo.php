@@ -3,7 +3,7 @@
  * Plugin Name: Stupid Simple Login Logo
  * Plugin URI: https://github.com/crftddev/stupid-simple-login-logo
  * Description: Allows administrators to change the WordPress login page logo.
- * Version: 1.15.1
+ * Version: 1.15.2
  * Requires at least: 5.0
  * Requires PHP: 5.6
  * Author: CRFTD
@@ -22,7 +22,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('SSLL_VERSION', '1.15.1');
+define('SSLL_VERSION', '1.15.2');
 define('SSLL_FILE', __FILE__);
 define('SSLL_PATH', plugin_dir_path(__FILE__));
 define('SSLL_URL', plugin_dir_url(__FILE__));
@@ -44,52 +44,93 @@ define('SSLL_CLIENT_ID', '98b57974-cbe9-4228-b48b-01683ea5c6d3');
 define('SSLL_CLIENT_NAME', 'Stupid Simple Login Logo');
 
 /**
- * Initialize the AppSero client
+ * Initialize the AppSero client.
+ *
+ * @return \Appsero\Client|null AppSero client instance or null on failure
  */
 function ssll_get_appsero_client() {
     static $client = null;
     
     if (null === $client) {
-        if (!class_exists('Appsero\Client')) {
-            require_once SSLL_PATH . 'appsero/src/Client.php';
+        $insights_file = SSLL_PATH . 'appsero/src/Insights.php';
+        $client_file = SSLL_PATH . 'appsero/src/Client.php';
+        
+        // Check if files exist
+        if (!file_exists($client_file) || !file_exists($insights_file)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('SSLL Error: AppSero files not found');
+            }
+            return null;
         }
         
-        $client = new \Appsero\Client(
-            SSLL_CLIENT_ID,
-            SSLL_CLIENT_NAME,
-            SSLL_FILE
-        );
+        try {
+            if (!class_exists('Appsero\\Client')) {
+                require_once $client_file;
+            }
+            
+            if (!class_exists('Appsero\\Insights')) {
+                require_once $insights_file;
+            }
+            
+            $client = new \Appsero\Client(
+                SSLL_CLIENT_ID,
+                SSLL_CLIENT_NAME,
+                SSLL_FILE
+            );
+        } catch (\Exception $e) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('SSLL AppSero Init Error: ' . $e->getMessage());
+            }
+            return null;
+        }
     }
     
     return $client;
 }
 
 /**
- * Initialize AppSero Insights
+ * Initialize AppSero Insights.
+ *
+ * @return void
  */
 function ssll_init_insights() {
-    $client = ssll_get_appsero_client();
-    if (!$client) {
-        return;
+    try {
+        // Get AppSero client instance
+        $client = ssll_get_appsero_client();
+        if (!$client) {
+            return;
+        }
+
+        // Initialize insights
+        $insights = $client->insights();
+        
+        // Add filter to skip sensitive options from tracking
+        add_filter('appsero_track_skip_options', function($skip_options) {
+            $skip_options[] = 'ssll_login_logo_url';
+            $skip_options[] = 'ssll_version';
+            return $skip_options;
+        });
+        
+        // Initialize with proper configuration
+        $insights->init([
+            'collect_email' => false,
+            'disable_tracking' => apply_filters('ssll_disable_tracking', false),
+            'notice' => true,
+            'notice_text' => __('Help improve Stupid Simple Login Logo by sharing non-sensitive usage data.', 'ssll-for-wp'),
+            'notice_dismiss_forever' => true
+        ]);
+        
+    } catch (\Exception $e) {
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('SSLL AppSero Init Error: ' . $e->getMessage());
+        }
     }
-    
-    $insights = $client->insights();
-    
-    add_filter('appsero_track_skip_options', function($skip_options) {
-        $skip_options[] = 'ssll_login_logo_url';
-        return $skip_options;
-    });
-    
-    $insights->init([
-        'collect_email' => false,
-        'disable_tracking' => false,
-        'notice' => true,
-        'notice_text' => __('Help improve Stupid Simple Login Logo by sharing non-sensitive usage data.', 'ssll-for-wp')
-    ]);
 }
 
 // Initialize AppSero components
-add_action('plugins_loaded', 'ssll_init_insights', 20);
+if (is_admin()) {
+    add_action('plugins_loaded', __NAMESPACE__ . '\\ssll_init_insights', 20);
+}
 
 // Autoloader for SSLL namespace
 spl_autoload_register(function ($class) {
