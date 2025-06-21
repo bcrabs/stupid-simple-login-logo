@@ -32,13 +32,22 @@ final class Security {
      */
     private static $rate_limited_actions = [
         'ssll_save_logo',
-        'ssll_remove_logo'
+        'ssll_remove_logo',
+        'ssll_update_settings'
     ];
     
+    private $temp_dir;
+    private $log_dir;
+    private $file_locks = [];
+
     /**
      * Private constructor to prevent direct instantiation.
      */
-    private function __construct() {}
+    private function __construct() {
+        $this->temp_dir = SSLL_TEMP_DIR;
+        $this->log_dir = SSLL_LOG_DIR;
+        $this->init_directories();
+    }
     
     /**
      * Prevent cloning of the instance.
@@ -70,120 +79,41 @@ final class Security {
      * Initialize security features.
      */
     public function init() {
-        add_action('init', [$this, 'init_security']);
+        // Add security headers
+        add_action('send_headers', [$this, 'add_security_headers'], 1);
+        
+        // Add rate limiting only for specific AJAX actions
+        add_action('wp_ajax_ssll_remove_logo', [$this, 'check_rate_limit'], 5);
+        add_action('wp_ajax_ssll_update_settings', [$this, 'check_rate_limit'], 5);
+        
+        // Add capability checks only for plugin's admin page
+        add_action('admin_menu', [$this, 'init_capability_checks'], 0);
     }
     
     /**
      * Initialize security headers and rate limiting.
-     */
-    public function init_security() {
-        if (!headers_sent()) {
-            add_action('send_headers', [$this, 'add_security_headers'], 1);
-        }
-        
-        if (!is_admin()) {
-            return;
-        }
-        
-        foreach (self::$rate_limited_actions as $action) {
-            add_action("admin_post_{$action}", [$this, 'check_rate_limit'], 5);
-        }
-    }
-    
-    /**
-     * Add security headers to responses.
      */
     public function add_security_headers() {
         if (headers_sent()) {
             return;
         }
 
-        header('X-Content-Type-Options: nosniff');
-        header('X-Frame-Options: SAMEORIGIN');
+        // Prevent XSS attacks
         header('X-XSS-Protection: 1; mode=block');
-        header('Referrer-Policy: strict-origin-when-cross-origin');
         
-        if (isset($_GET['page']) && $_GET['page'] === 'stupid-simple-login-logo') {
-            header("Content-Security-Policy: default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline';");
+        // Prevent MIME type sniffing
+        header('X-Content-Type-Options: nosniff');
+        
+        // Prevent clickjacking
+        header('X-Frame-Options: DENY');
+        
+        // Enable HSTS
+        if (is_ssl()) {
+            header('Strict-Transport-Security: max-age=31536000; includeSubDomains; preload');
         }
-    }
-    
-    /**
-     * Validate file MIME type.
-     *
-     * @param string $file_path Path to the file
-     * @return string|false MIME type if valid, false otherwise
-     */
-    public function validate_mime_type($file_path) {
-        if (!file_exists($file_path) || !is_readable($file_path)) {
-            return false;
-        }
-
-        $wp_check = wp_check_filetype($file_path);
-        if (!empty($wp_check['type']) && isset(self::$valid_mime_types[$wp_check['type']])) {
-            return $wp_check['type'];
-        }
-
-        if (function_exists('mime_content_type')) {
-            $mime_type = mime_content_type($file_path);
-            if ($mime_type && isset(self::$valid_mime_types[$mime_type])) {
-                return $mime_type;
-            }
-        }
-
-        $image_info = @getimagesize($file_path);
-        if ($image_info && isset($image_info['mime'])) {
-            $mime_type = $image_info['mime'];
-            if (isset(self::$valid_mime_types[$mime_type])) {
-                return $mime_type;
-            }
-        }
-
-        return false;
-    }
-    
-    /**
-     * Validate image URL including MIME type check.
-     *
-     * @param string $url The URL to validate
-     * @return bool
-     */
-    public function validate_image_url($url) {
-        // First sanitize the URL
-        $url = $this->sanitize_image_url($url);
-        if (!$url) {
-            return false;
-        }
-
-        // For local Media Library images
-        $attachment_id = attachment_url_to_postid($url);
-        if ($attachment_id) {
-            $mime_type = get_post_mime_type($attachment_id);
-            if (!isset(self::$valid_mime_types[$mime_type])) {
-                return false;
-            }
-
-            $file_path = get_attached_file($attachment_id);
-            if (!$file_path || !$this->validate_mime_type($file_path)) {
-                return false;
-            }
-
-            return true;
-        }
-
-        // For external URLs
-        $headers = wp_get_http_headers($url);
-        if (!$headers || !isset($headers['content-type'])) {
-            return false;
-        }
-
-        $mime_type = $headers['content-type'];
-        // Strip charset if present
-        if (strpos($mime_type, ';') !== false) {
-            $mime_type = trim(strstr($mime_type, ';', true));
-        }
-
-        return isset(self::$valid_mime_types[$mime_type]);
+        
+        // Control referrer information
+        header('Referrer-Policy: strict-origin-when-cross-origin');
     }
     
     /**
@@ -197,9 +127,7 @@ final class Security {
             return false;
         }
         
-        $salt = wp_hash(random_bytes(32));
-        $rate_key = 'ssll_rate_' . wp_hash($ip . $salt);
-        
+        $rate_key = 'ssll_rate_' . wp_hash($ip);
         $rate_data = get_transient($rate_key);
         $current_time = time();
         
@@ -213,6 +141,10 @@ final class Security {
         }
         
         if ($rate_data['ip'] !== $ip) {
+            $this->log_security_event('Rate limit IP mismatch', [
+                'ip' => $ip,
+                'expected_ip' => $rate_data['ip']
+            ]);
             return false;
         }
         
@@ -226,7 +158,11 @@ final class Security {
         }
         
         if ($rate_data['count'] >= SSLL_RATE_LIMIT_MAX) {
-            $this->log_security_event('Rate limit exceeded', ['ip' => $ip]);
+            $this->log_security_event('Rate limit exceeded', [
+                'ip' => $ip,
+                'count' => $rate_data['count'],
+                'action' => current_action()
+            ]);
             wp_die(
                 esc_html__('Rate limit exceeded. Please try again later.', 'ssll-for-wp'),
                 esc_html__('Too Many Requests', 'ssll-for-wp'),
@@ -246,34 +182,19 @@ final class Security {
      * @return string
      */
     private function get_client_ip() {
-        static $ip = null;
+        $ip = '';
         
-        if (null !== $ip) {
-            return $ip;
-        }
-        
-        if (!empty($_SERVER['REMOTE_ADDR'])) {
+        if (isset($_SERVER['HTTP_CF_CONNECTING_IP'])) {
+            $ip = $_SERVER['HTTP_CF_CONNECTING_IP'];
+        } elseif (isset($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+            $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
+        } elseif (isset($_SERVER['HTTP_CLIENT_IP'])) {
+            $ip = $_SERVER['HTTP_CLIENT_IP'];
+        } elseif (isset($_SERVER['REMOTE_ADDR'])) {
             $ip = $_SERVER['REMOTE_ADDR'];
-        } elseif (defined('SSLL_TRUSTED_PROXY') && SSLL_TRUSTED_PROXY) {
-            $headers = [
-                'HTTP_CF_CONNECTING_IP',
-                'HTTP_X_REAL_IP',
-                'HTTP_X_FORWARDED_FOR'
-            ];
-            
-            foreach ($headers as $header) {
-                if (!empty($_SERVER[$header])) {
-                    $ip = $_SERVER[$header];
-                    if (strpos($ip, ',') !== false) {
-                        $ips = explode(',', $ip);
-                        $ip = trim($ips[0]);
-                    }
-                    break;
-                }
-            }
         }
         
-        return filter_var($ip ?? '', FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) ?: '';
+        return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '';
     }
     
     /**
@@ -289,12 +210,7 @@ final class Security {
                 'action' => $action,
                 'ip' => $this->get_client_ip()
             ]);
-            
-            wp_die(
-                esc_html__('Security check failed.', 'ssll-for-wp'),
-                esc_html__('Security Error', 'ssll-for-wp'),
-                ['response' => 403, 'back_link' => true]
-            );
+            return false;
         }
         return true;
     }
@@ -306,13 +222,7 @@ final class Security {
      * @return bool
      */
     public function has_capability($capability = 'manage_options') {
-        static $caps = [];
-        
-        if (!isset($caps[$capability])) {
-            $caps[$capability] = current_user_can($capability);
-        }
-        
-        return $caps[$capability];
+        return current_user_can($capability);
     }
     
     /**
@@ -322,83 +232,21 @@ final class Security {
      * @return bool|\WP_Error
      */
     public function verify_user_capability($capability = 'manage_options') {
-        if (!$this->has_capability($capability)) {
-            $this->log_security_event('Unauthorized access attempt', [
+        // Only check capabilities on the plugin's admin page
+        $current_page = isset($_GET['page']) ? sanitize_text_field($_GET['page']) : '';
+        if ($current_page !== 'stupid-simple-login-logo') {
+            return true;
+        }
+
+        if (!current_user_can($capability)) {
+            $this->log_security_event('Insufficient capabilities', [
                 'capability' => $capability,
-                'user_id' => get_current_user_id(),
-                'ip' => $this->get_client_ip()
+                'user' => get_current_user_id(),
+                'page' => $current_page
             ]);
-            
-            wp_die(
-                esc_html__('You do not have sufficient permissions to access this page.', 'ssll-for-wp'),
-                esc_html__('Permission Denied', 'ssll-for-wp'),
-                ['response' => 403, 'back_link' => true]
-            );
+            return false;
         }
         return true;
-    }
-    
-    /**
-     * Sanitize image URL.
-     *
-     * @param string $url URL to sanitize
-     * @return string|false
-     */
-    public function sanitize_image_url($url) {
-        $url = esc_url_raw($url);
-        if (empty($url)) {
-            return false;
-        }
-        
-        $parsed_url = wp_parse_url($url);
-        if (false === $parsed_url || !isset($parsed_url['host'])) {
-            return false;
-        }
-        
-        $site_url = wp_parse_url(site_url());
-        if ($parsed_url['host'] !== $site_url['host']) {
-            return false;
-        }
-        
-        return $url;
-    }
-
-    /**
-     * Sanitize option value.
-     *
-     * @param mixed $value Value to sanitize
-     * @return mixed
-     */
-    public function sanitize_option_value($value) {
-        if (is_array($value)) {
-            return array_map([$this, 'sanitize_option_value'], $value);
-        }
-        
-        if (is_string($value)) {
-            return sanitize_text_field($value);
-        }
-        
-        return $value;
-    }
-    
-    /**
-     * Sanitize file path.
-     *
-     * @param string $path Path to sanitize
-     * @return string|false
-     */
-    public function sanitize_file_path($path) {
-        $path = str_replace('\\', '/', $path);
-        $path = preg_replace('/\.+\//', '', $path);
-        
-        $real_path = realpath($path);
-        $upload_path = realpath(wp_upload_dir()['basedir']);
-        
-        if (!$real_path || !$upload_path || strpos($real_path, $upload_path) !== 0) {
-            return false;
-        }
-        
-        return $real_path;
     }
     
     /**
@@ -408,26 +256,32 @@ final class Security {
      * @param array $context Event context
      */
     private function log_security_event($message, $context = []) {
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log(sprintf(
-                'SSLL Security Event: %s - %s',
-                $message,
-                wp_json_encode($context)
-            ));
+        if (!is_dir($this->log_dir)) {
+            wp_mkdir_p($this->log_dir);
         }
+        
+        $log_file = $this->log_dir . '/security-' . date('Y-m-d') . '.log';
+        $timestamp = current_time('mysql');
+        $user_id = get_current_user_id();
+        
+        $log_entry = sprintf(
+            "[%s] %s | User: %d | IP: %s | Context: %s\n",
+            $timestamp,
+            $message,
+            $user_id,
+            $this->get_client_ip(),
+            json_encode($context)
+        );
+        
+        error_log($log_entry, 3, $log_file);
     }
     
     /**
      * Clean up security-related data.
      */
     public function cleanup() {
-        global $wpdb;
-        
-        $wpdb->query($wpdb->prepare(
-            "DELETE FROM {$wpdb->options} 
-            WHERE option_name LIKE %s",
-            $wpdb->esc_like('_transient_ssll_rate_') . '%'
-        ));
+        $this->cleanup_temp_files();
+        $this->cleanup_old_logs();
     }
     
     /**
@@ -435,5 +289,136 @@ final class Security {
      */
     public function uninstall() {
         $this->cleanup();
+    }
+
+    private function init_directories() {
+        if (!is_dir($this->temp_dir)) {
+            wp_mkdir_p($this->temp_dir);
+        }
+        
+        if (!is_dir($this->log_dir)) {
+            wp_mkdir_p($this->log_dir);
+        }
+    }
+
+    public function check_requirements() {
+        if (version_compare(PHP_VERSION, SSLL_MIN_PHP, '<')) {
+            add_action('admin_notices', function() {
+                printf(
+                    '<div class="error"><p>%s</p></div>',
+                    sprintf(
+                        /* translators: %s: PHP version */
+                        esc_html__('Stupid Simple Login Logo requires PHP version %s or higher.', 'ssll-for-wp'),
+                        SSLL_MIN_PHP
+                    )
+                );
+            });
+        }
+        
+        if (version_compare($GLOBALS['wp_version'], SSLL_MIN_WP, '<')) {
+            add_action('admin_notices', function() {
+                printf(
+                    '<div class="error"><p>%s</p></div>',
+                    sprintf(
+                        /* translators: %s: WordPress version */
+                        esc_html__('Stupid Simple Login Logo requires WordPress version %s or higher.', 'ssll-for-wp'),
+                        SSLL_MIN_WP
+                    )
+                );
+            });
+        }
+    }
+
+    public function validate_image($file_path) {
+        if (!file_exists($file_path) || !is_readable($file_path)) {
+            return false;
+        }
+        
+        // Verify file ownership
+        if (fileowner($file_path) !== SSLL_FILE_OWNER) {
+            return false;
+        }
+        
+        // Verify file permissions
+        if (fileperms($file_path) !== SSLL_FILE_PERMS) {
+            return false;
+        }
+        
+        // Check file size
+        $file_size = filesize($file_path);
+        if ($file_size === false || $file_size > SSLL_MAX_FILE_SIZE) {
+            return false;
+        }
+        
+        // Validate MIME type
+        $mime_type = $this->validate_mime_type($file_path);
+        if (!$mime_type) {
+            return false;
+        }
+        
+        // Validate image dimensions
+        $image_info = @getimagesize($file_path);
+        if (!$image_info) {
+            return false;
+        }
+        
+        if ($image_info[0] > SSLL_MAX_IMAGE_DIMENSIONS || 
+            $image_info[1] > SSLL_MAX_IMAGE_DIMENSIONS ||
+            $image_info[0] < SSLL_MIN_IMAGE_DIMENSIONS ||
+            $image_info[1] < SSLL_MIN_IMAGE_DIMENSIONS) {
+            return false;
+        }
+        
+        return true;
+    }
+
+    private function cleanup_temp_files() {
+        if (!is_dir($this->temp_dir)) {
+            return;
+        }
+        
+        $files = glob($this->temp_dir . '/*');
+        if (!is_array($files)) {
+            return;
+        }
+        
+        foreach ($files as $file) {
+            if (is_file($file)) {
+                unlink($file);
+            }
+        }
+    }
+    
+    private function cleanup_old_logs() {
+        if (!is_dir($this->log_dir)) {
+            return;
+        }
+        
+        $files = glob($this->log_dir . '/security-*.log');
+        if (!is_array($files)) {
+            return;
+        }
+        
+        $cutoff = strtotime('-30 days');
+        
+        foreach ($files as $file) {
+            if (is_file($file) && filemtime($file) < $cutoff) {
+                unlink($file);
+            }
+        }
+    }
+
+    public function init_capability_checks() {
+        // Only check capabilities on the plugin's admin page
+        $current_page = isset($_GET['page']) ? sanitize_text_field($_GET['page']) : '';
+        if ($current_page === 'stupid-simple-login-logo') {
+            if (!current_user_can('manage_options')) {
+                wp_die(
+                    esc_html__('You do not have sufficient permissions to access this page.', 'ssll-for-wp'),
+                    esc_html__('Access Denied', 'ssll-for-wp'),
+                    ['response' => 403]
+                );
+            }
+        }
     }
 }
