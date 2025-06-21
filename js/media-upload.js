@@ -1,45 +1,10 @@
 /* global wp */
-(function($) {
-    'use strict';
-
-    // Ensure required data is available
-    if (typeof ssllData === 'undefined') {
-        console.error('SSLL: Required data is missing');
-        return;
-    }
-
-    var mediaUploader = null;
-    var $preview = $('#logo_preview');
-    var $logoUrl = $('#logo_url');
-    var $uploadButton = $('#upload_logo_button');
-    var $removeButton = $('#remove_logo_button');
-    var $saveButton = $('#submit');
+jQuery(document).ready(function($) {
+    // Initialize media uploader
+    let mediaUploader;
     
-    function updateImagePreview(url) {
-        if (!url) {
-            $preview.length && $preview.remove();
-            $removeButton.hide();
-            $saveButton.hide();
-            $uploadButton.text(ssllData.translations.selectLogo);
-            return;
-        }
-        
-        if (!$preview.length) {
-            $preview = $('<img>', {
-                id: 'logo_preview',
-                alt: 'Login Logo Preview',
-                style: 'max-width: 320px; height: auto; margin: 2em 0;'
-            }).prependTo('.ssll-logo-preview');
-        }
-        
-        $preview.attr('src', url);
-        $removeButton.show();
-        $saveButton.show();
-        $uploadButton.text(ssllData.translations.changeLogo);
-    }
-
-    // Handle logo selection
-    $uploadButton.on('click', function(e) {
+    // Handle logo upload
+    $('#upload_logo_button').on('click', function(e) {
         e.preventDefault();
         
         if (mediaUploader) {
@@ -59,32 +24,78 @@
         });
         
         mediaUploader.on('select', function() {
-            var attachment = mediaUploader.state().get('selection').first().toJSON();
+            const attachment = mediaUploader.state().get('selection').first().toJSON();
             
             // Validate file type
-            if (!attachment.mime.match(/^image\/(jpeg|png)$/)) {
+            if (!ssllData.allowedTypes.includes(attachment.mime)) {
                 alert(ssllData.translations.invalidType);
                 return;
             }
             
             // Validate file size
-            if (attachment.size > 5242880) {
+            if (attachment.filesize > ssllData.maxFileSize) {
                 alert(ssllData.translations.fileTooBig);
                 return;
             }
             
-            // Update form
-            $logoUrl.val(attachment.url);
-            updateImagePreview(attachment.url);
+            // Update preview and hidden input
+            $('#logo_preview').remove();
+            $('form div').first().append(
+                $('<img>', {
+                    id: 'logo_preview',
+                    src: attachment.url,
+                    alt: 'Current login logo',
+                    style: 'max-width: 320px; height: auto;'
+                })
+            );
+            $('#logo_url').val(attachment.url);
+            
+            // Update button text
+            $('#upload_logo_button').text(ssllData.translations.changeLogo);
+            
+            // Show remove button if not already visible
+            if ($('#remove_logo_button').length === 0) {
+                $('form p').first().append(
+                    $('<button>', {
+                        type: 'button',
+                        class: 'button',
+                        id: 'remove_logo_button',
+                        text: ssllData.translations.removeLogo
+                    })
+                );
+            }
         });
         
         mediaUploader.open();
     });
     
-    // Handle logo removal confirmation
-    $removeButton.length && $removeButton.on('click', function(e) {
-        if (!confirm($(this).data('confirm'))) {
-            e.preventDefault();
+    // Handle logo removal
+    $(document).on('click', '#remove_logo_button', function(e) {
+        e.preventDefault();
+        
+        if (!confirm(ssllData.translations.removeConfirm)) {
+            return;
         }
+        
+        // Create form and submit
+        const form = $('<form>', {
+            method: 'post',
+            action: ssllData.adminPostUrl
+        });
+        
+        form.append($('<input>', {
+            type: 'hidden',
+            name: 'action',
+            value: 'ssll_remove_logo'
+        }));
+        
+        form.append($('<input>', {
+            type: 'hidden',
+            name: 'nonce',
+            value: ssllData.nonce
+        }));
+        
+        $('body').append(form);
+        form.submit();
     });
-})(jQuery);
+});

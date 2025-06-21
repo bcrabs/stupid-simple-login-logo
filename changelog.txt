@@ -1,3 +1,83 @@
+VERSION 1.16.1
+06/08/2025
+1. Security Enhancements
+- Fixed potential directory traversal in uninstall.php
+- Replaced unsafe file operations with WordPress functions
+- Added proper capability checks for uninstallation
+- Added proper path validation using realpath()
+- Added proper file existence and readability checks
+- Improved autoloader security with path validation
+- Replaced unsafe $_SERVER['PHP_SELF'] usage
+- Added proper error handling for file operations
+- Added proper cleanup procedures
+
+2. WordPress Plugin Guidelines Compliance
+- Added proper uninstall.php file
+- Fixed version consistency across files
+- Removed Update URI (not allowed for WordPress.org)
+- Added proper License URI
+- Updated Plugin URI to WordPress.org format
+- Added proper README.txt sections
+- Added proper documentation
+- Added proper internationalization support
+
+3. Code Quality Improvements
+- Added proper path handling with trailingslashit()
+- Improved file validation
+- Added proper error logging
+- Added proper cleanup procedures
+- Improved code organization
+- Added proper documentation
+- Added proper type checking
+
+* Security: Simplified plugin initialization to prevent admin access issues
+* Security: Removed redundant security checks that were conflicting with WordPress core
+* Security: Improved capability checking using WordPress native functions
+* Code: Removed namespace and autoloading system for better compatibility
+* Code: Simplified admin page registration
+* Code: Improved error handling and user feedback
+* Code: Removed unnecessary file operations and checks
+* Code: Streamlined plugin structure for better maintainability
+
+VERSION 1.16.0
+01/20/2025
+1. Major Security and Compatibility Updates
+- Updated minimum PHP version to 7.4
+- Updated minimum WordPress version to 5.8
+- Fixed version inconsistency in main plugin file
+- Added new security constants for better control
+
+2. Enhanced Security Measures
+- Added proper CSRF protection for all AJAX requests
+- Implemented server-side file validation
+- Added image dimension validation
+- Added proper error handling and user feedback
+- Improved file upload security
+- Added proper cleanup of temporary files
+- Enhanced MIME type validation
+
+3. JavaScript Improvements
+- Added proper nonce verification
+- Improved client-side validation
+- Added dimension validation
+- Added better error handling and user feedback
+- Improved form submission handling
+- Added proper AJAX error handling
+
+4. New Features
+- Added image dimension tracking
+- Added proper error message display
+- Added better user feedback
+- Added proper cleanup procedures
+- Added better state management
+
+5. Bug Fixes
+- Fixed version inconsistency
+- Fixed security vulnerabilities
+- Fixed file upload issues
+- Fixed error handling
+- Fixed cleanup procedures
+
 VERSION 1.15.5
 Ditching AppSero.
 

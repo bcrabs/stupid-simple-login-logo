@@ -21,7 +21,6 @@ final class Init {
     public static function get_instance() {
         if (null === self::$instance) {
             self::$instance = new self();
-            self::$instance->init();
         }
         return self::$instance;
     }
@@ -32,7 +31,6 @@ final class Init {
         }
         
         $this->load_dependencies();
-        $this->init_modules();
         $this->setup_hooks();
     }
     
@@ -50,11 +48,17 @@ final class Init {
     
     private function load_dependencies() {
         foreach (self::$required_files as $file) {
-            require_once SSLL_PATH . 'includes/' . $file;
+            if (file_exists(SSLL_PATH . 'includes/' . $file)) {
+                require_once SSLL_PATH . 'includes/' . $file;
+            }
         }
     }
     
     private function init_modules() {
+        if (!is_admin()) {
+            return;
+        }
+
         try {
             $this->modules = [
                 'security' => Security::get_instance(),
@@ -64,7 +68,11 @@ final class Init {
                 'admin' => Admin::get_instance()
             ];
             
-            add_action('init', [$this, 'init_module_functionality'], 0);
+            foreach ($this->modules as $module) {
+                if (method_exists($module, 'init')) {
+                    $module->init();
+                }
+            }
             
         } catch (\Exception $e) {
             error_log('SSLL Init Error: ' . $e->getMessage());
@@ -81,19 +89,16 @@ final class Init {
     private function setup_hooks() {
         register_activation_hook(SSLL_FILE, [$this, 'activate']);
         register_deactivation_hook(SSLL_FILE, [$this, 'deactivate']);
-        add_action('init', [$this, 'load_textdomain'], 0);
+        
+        // Only load textdomain and initialize modules in admin
+        if (is_admin()) {
+            add_action('admin_init', [$this, 'init_modules'], 0);
+            add_action('init', [$this, 'load_textdomain'], 0);
+        }
         
         if (function_exists('register_uninstall_hook')) {
             register_uninstall_hook(SSLL_FILE, [__CLASS__, 'uninstall']);
         }
-    }
-    
-    public function init_module_functionality() {
-        array_walk($this->modules, function($module) {
-            if (method_exists($module, 'init')) {
-                $module->init();
-            }
-        });
     }
     
     public function activate() {
@@ -102,15 +107,12 @@ final class Init {
         }
         
         try {
+            $this->init_modules();
+            
             foreach ($this->modules as $module) {
                 if (method_exists($module, 'setup')) {
                     $module->setup();
                 }
-            }
-            
-            $client = ssll_get_appsero_client();
-            if ($client) {
-                $client->insights();
             }
             
             flush_rewrite_rules();

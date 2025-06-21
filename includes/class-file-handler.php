@@ -113,7 +113,15 @@ final class File_Handler {
     }
     
     private function serve_file($file_path) {
-        $file_size = filesize($file_path);
+        // Get file size using WordPress filesystem
+        WP_Filesystem();
+        global $wp_filesystem;
+        
+        if (!$wp_filesystem->exists($file_path)) {
+            throw new \Exception(__('File not found', 'ssll-for-wp'));
+        }
+        
+        $file_size = $wp_filesystem->size($file_path);
         if ($file_size === false || $file_size > SSLL_MAX_FILE_SIZE) {
             throw new \Exception(__('Invalid file size', 'ssll-for-wp'));
         }
@@ -137,8 +145,11 @@ final class File_Handler {
             throw new \Exception(__('Invalid file type', 'ssll-for-wp'));
         }
         
+        $filename = basename($file_path);
+        
         header('Content-Type: ' . $mime_type);
         header('Content-Length: ' . $file_size);
+        header('Content-Disposition: inline; filename="' . esc_attr($filename) . '"');
         header('ETag: ' . $etag);
         header('Last-Modified: ' . $last_modified);
         header('X-Content-Type-Options: nosniff');
@@ -164,6 +175,12 @@ final class File_Handler {
             throw new \Exception(__('Error reading file', 'ssll-for-wp'));
         }
         
+        // Lock file for reading
+        if (!flock($handle, LOCK_SH)) {
+            fclose($handle);
+            throw new \Exception(__('Error locking file', 'ssll-for-wp'));
+        }
+        
         try {
             while (!feof($handle)) {
                 $buffer = fread($handle, $chunk_size);
@@ -174,6 +191,7 @@ final class File_Handler {
                 flush();
             }
         } finally {
+            flock($handle, LOCK_UN);
             fclose($handle);
         }
         exit;
@@ -189,7 +207,9 @@ final class File_Handler {
         
         if (is_array($temp_files)) {
             foreach ($temp_files as $file) {
-                $wp_filesystem->delete($file);
+                if ($wp_filesystem->exists($file)) {
+                    $wp_filesystem->delete($file);
+                }
             }
         }
     }
