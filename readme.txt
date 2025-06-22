@@ -2,7 +2,7 @@
 Contributors: crftd
 Tags: login, logo, branding, admin, simple
 Requires at least: 5.8
-Tested up to: 6.4
+Tested up to: 6.8
 Requires PHP: 7.4
 Stable tag: 1.16.1
 License: GPLv2 or later
@@ -13,6 +13,9 @@ A lightweight, secure, and user-friendly plugin to customize your WordPress logi
 == Description ==
 
 Stupid Simple Login Logo is a lightweight plugin that allows you to easily customize your WordPress login page logo. It provides a simple, intuitive interface in the WordPress admin area to select and manage your custom login logo.
+
+This plugin was developed specfically with freelancers, agencies, and users that have a desire to remove the default WordPress logo and set their own. No custom uploads by file managers or FTP clients, no need for page builder templates. This plugin is meant to be super simple. Upload an image from your device or select one from the WordPress Media Library. Then save. No bloated options. No hoops to jump through or URL changes. Just set and forget. Simply brand the login page for your client or agency.
+
 
 = Key Features =
 

@@ -6,26 +6,33 @@ if (!defined('WP_UNINSTALL_PLUGIN')) {
 
 // Verify user capabilities
 if (!current_user_can('activate_plugins')) {
-    wp_die(__('You do not have sufficient permissions to uninstall this plugin.', 'ssll-for-wp'));
+    wp_die(esc_html__('You do not have sufficient permissions to uninstall this plugin.', 'stupid-simple-login-logo'));
 }
 
-// Start transaction
-global $wpdb;
-$wpdb->query('START TRANSACTION');
+// Include the WP_Filesystem API
+require_once ABSPATH . 'wp-admin/includes/file.php';
+WP_Filesystem();
+global $wp_filesystem;
 
 try {
-    // Delete plugin options
+    // Delete plugin options using WordPress functions
     delete_option('ssll_logo_url');
     delete_option('ssll_logo_dimensions');
     delete_option('ssll_settings');
     delete_option('ssll_version');
 
-    // Clean up transients
-    $wpdb->query($wpdb->prepare(
-        "DELETE FROM {$wpdb->options} 
+    // Clean up transients using WordPress functions
+    global $wpdb;
+    $transients = $wpdb->get_col($wpdb->prepare(
+        "SELECT option_name FROM {$wpdb->options} 
         WHERE option_name LIKE %s",
         $wpdb->esc_like('_transient_ssll_rate_') . '%'
     ));
+    
+    foreach ($transients as $transient) {
+        $transient_name = str_replace('_transient_', '', $transient);
+        delete_transient($transient_name);
+    }
 
     // Clean up temporary files
     $upload_dir = wp_upload_dir();
@@ -38,27 +45,28 @@ try {
     $log_dir_real = realpath($log_dir);
 
     if ($temp_dir_real && strpos($temp_dir_real, $upload_dir_real) === 0) {
-        if (is_dir($temp_dir)) {
-            $files = array_filter(glob($temp_dir . '/*'), 'is_file');
+        if ($wp_filesystem->is_dir($temp_dir)) {
+            $files = $wp_filesystem->dirlist($temp_dir);
             if ($files) {
-                foreach ($files as $file) {
-                    if (is_file($file) && strpos(realpath($file), $temp_dir_real) === 0) {
-                        if (!wp_delete_file($file)) {
+                foreach (array_keys($files) as $file) {
+                    $file_path = trailingslashit($temp_dir) . $file;
+                    if ($wp_filesystem->is_file($file_path)) {
+                        if (!$wp_filesystem->delete($file_path)) {
                             throw new \Exception(sprintf(
                                 /* translators: %s: File path */
-                                __('Failed to delete file: %s', 'ssll-for-wp'),
-                                $file
+                                __('Failed to delete file: %s', 'stupid-simple-login-logo'),
+                                esc_html($file_path)
                             ));
                         }
                     }
                 }
             }
-            if (is_dir($temp_dir) && count(glob($temp_dir . '/*')) === 0) {
-                if (!rmdir($temp_dir)) {
+            if ($wp_filesystem->is_dir($temp_dir) && empty($wp_filesystem->dirlist($temp_dir))) {
+                if (!$wp_filesystem->rmdir($temp_dir)) {
                     throw new \Exception(sprintf(
                         /* translators: %s: Directory path */
-                        __('Failed to remove directory: %s', 'ssll-for-wp'),
-                        $temp_dir
+                        __('Failed to remove directory: %s', 'stupid-simple-login-logo'),
+                        esc_html($temp_dir)
                     ));
                 }
             }
@@ -66,50 +74,39 @@ try {
     }
 
     if ($log_dir_real && strpos($log_dir_real, $upload_dir_real) === 0) {
-        if (is_dir($log_dir)) {
-            $files = array_filter(glob($log_dir . '/*'), 'is_file');
+        if ($wp_filesystem->is_dir($log_dir)) {
+            $files = $wp_filesystem->dirlist($log_dir);
             if ($files) {
-                foreach ($files as $file) {
-                    if (is_file($file) && strpos(realpath($file), $log_dir_real) === 0) {
-                        if (!wp_delete_file($file)) {
+                foreach (array_keys($files) as $file) {
+                     $file_path = trailingslashit($log_dir) . $file;
+                    if ($wp_filesystem->is_file($file_path)) {
+                        if (!$wp_filesystem->delete($file_path)) {
                             throw new \Exception(sprintf(
                                 /* translators: %s: File path */
-                                __('Failed to delete file: %s', 'ssll-for-wp'),
-                                $file
+                                __('Failed to delete file: %s', 'stupid-simple-login-logo'),
+                                esc_html($file_path)
                             ));
                         }
                     }
                 }
             }
-            if (is_dir($log_dir) && count(glob($log_dir . '/*')) === 0) {
-                if (!rmdir($log_dir)) {
+            if ($wp_filesystem->is_dir($log_dir) && empty($wp_filesystem->dirlist($log_dir))) {
+                if (!$wp_filesystem->rmdir($log_dir)) {
                     throw new \Exception(sprintf(
                         /* translators: %s: Directory path */
-                        __('Failed to remove directory: %s', 'ssll-for-wp'),
-                        $log_dir
+                        __('Failed to remove directory: %s', 'stupid-simple-login-logo'),
+                        esc_html($log_dir)
                     ));
                 }
             }
         }
     }
 
-    // Commit transaction
-    $wpdb->query('COMMIT');
-
 } catch (\Exception $e) {
-    // Rollback transaction
-    $wpdb->query('ROLLBACK');
-    
-    // Log error
-    error_log(sprintf(
-        '[SSLL Uninstall Error] %s',
-        $e->getMessage()
-    ));
-    
     // Show error to user
     wp_die(
         esc_html($e->getMessage()),
-        esc_html__('Uninstall Error', 'ssll-for-wp'),
+        esc_html__('Uninstall Error', 'stupid-simple-login-logo'),
         ['response' => 500]
     );
 } 

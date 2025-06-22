@@ -6,9 +6,10 @@
  * Version: 1.16.1
  * Requires at least: 5.8
  * Requires PHP: 7.4
+ * Tested up to: 6.8
  * Author: CRFTD
  * Author URI: https://crftd.dev
- * Text Domain: ssll-for-wp
+ * Text Domain: stupid-simple-login-logo
  * Domain Path: /languages
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -46,8 +47,8 @@ define('SSLL_ALLOWED_IMAGE_TYPES', ['image/jpeg', 'image/png', 'image/gif', 'ima
  */
 add_action('admin_menu', function() {
     add_options_page(
-        __('Login Logo Settings', 'ssll-for-wp'),
-        __('Login Logo', 'ssll-for-wp'),
+        esc_html__('Login Logo Settings', 'stupid-simple-login-logo'),
+        esc_html__('Login Logo', 'stupid-simple-login-logo'),
         'manage_options',
         'stupid-simple-login-logo',
         'ssll_render_settings_page'
@@ -78,19 +79,19 @@ add_action('admin_enqueue_scripts', function($hook) {
         'ssllData',
         [
             'nonce' => wp_create_nonce('ssll_remove_logo'),
-            'frame_title' => __('Select Login Logo', 'ssll-for-wp'),
-            'frame_button' => __('Use as Login Logo', 'ssll-for-wp'),
+            'frame_title' => esc_html__('Select Login Logo', 'stupid-simple-login-logo'),
+            'frame_button' => esc_html__('Use as Login Logo', 'stupid-simple-login-logo'),
             'allowedTypes' => SSLL_ALLOWED_IMAGE_TYPES,
             'maxFileSize' => SSLL_MAX_FILE_SIZE,
             'adminPostUrl' => admin_url('admin-post.php'),
             'translations' => [
-                'invalidType' => __('Please select a JPEG or PNG image.', 'ssll-for-wp'),
-                'fileTooBig' => __('File size must not exceed 5MB.', 'ssll-for-wp'),
-                'removeConfirm' => __('Are you sure you want to remove the custom logo?', 'ssll-for-wp'),
-                'selectLogo' => __('Select Logo', 'ssll-for-wp'),
-                'changeLogo' => __('Change Logo', 'ssll-for-wp'),
-                'removeLogo' => __('Remove Logo', 'ssll-for-wp'),
-                'genericError' => __('An error occurred. Please try again.', 'ssll-for-wp')
+                'invalidType' => esc_html__('Please select a JPEG or PNG image.', 'stupid-simple-login-logo'),
+                'fileTooBig' => esc_html__('File size must not exceed 5MB.', 'stupid-simple-login-logo'),
+                'removeConfirm' => esc_html__('Are you sure you want to remove the custom logo?', 'stupid-simple-login-logo'),
+                'selectLogo' => esc_html__('Select Logo', 'stupid-simple-login-logo'),
+                'changeLogo' => esc_html__('Change Logo', 'stupid-simple-login-logo'),
+                'removeLogo' => esc_html__('Remove Logo', 'stupid-simple-login-logo'),
+                'genericError' => esc_html__('An error occurred. Please try again.', 'stupid-simple-login-logo')
             ]
         ]
     );
@@ -102,12 +103,15 @@ add_action('admin_enqueue_scripts', function($hook) {
  */
 add_action('admin_post_ssll_save_logo', function() {
     if (!current_user_can('manage_options')) {
-        wp_die(__('You do not have sufficient permissions to access this page.', 'ssll-for-wp'));
+        wp_die(esc_html__('You do not have sufficient permissions to access this page.', 'stupid-simple-login-logo'));
     }
 
+    // Verify nonce
     check_admin_referer('ssll_save_logo', 'nonce');
 
-    $logo_url = isset($_POST['logo_url']) ? esc_url_raw($_POST['logo_url']) : '';
+    $logo_url = isset($_POST['logo_url']) ? sanitize_text_field(wp_unslash($_POST['logo_url'])) : '';
+    $logo_url = esc_url_raw($logo_url);
+    
     if (empty($logo_url)) {
         wp_redirect(add_query_arg(
             ['page' => 'stupid-simple-login-logo', 'error' => 'no_logo'],
@@ -130,10 +134,12 @@ add_action('admin_post_ssll_save_logo', function() {
  */
 add_action('admin_post_ssll_remove_logo', function() {
     if (!current_user_can('manage_options')) {
-        wp_die(__('You do not have sufficient permissions to access this page.', 'ssll-for-wp'));
+        wp_die(esc_html__('You do not have sufficient permissions to access this page.', 'stupid-simple-login-logo'));
     }
 
+    // Verify nonce
     check_admin_referer('ssll_remove_logo', 'nonce');
+
     delete_option('ssll_logo_url');
 
     wp_redirect(add_query_arg(
@@ -149,31 +155,31 @@ add_action('admin_post_ssll_remove_logo', function() {
  */
 function ssll_render_settings_page() {
     if (!current_user_can('manage_options')) {
-        wp_die(__('You do not have sufficient permissions to access this page.', 'ssll-for-wp'));
+        wp_die(esc_html__('You do not have sufficient permissions to access this page.', 'stupid-simple-login-logo'));
     }
 
     $logo_url = get_option('ssll_logo_url', '');
     
     // Add success/error messages
-    if (isset($_GET['updated']) && $_GET['updated'] === 'true') {
+    if (isset($_GET['updated']) && sanitize_text_field(wp_unslash($_GET['updated'])) === 'true') {
         add_settings_error(
             'ssll_messages',
             'ssll_message',
-            __('Logo settings saved.', 'ssll-for-wp'),
+            esc_html__('Logo settings saved.', 'stupid-simple-login-logo'),
             'updated'
         );
-    } elseif (isset($_GET['removed']) && $_GET['removed'] === 'true') {
+    } elseif (isset($_GET['removed']) && sanitize_text_field(wp_unslash($_GET['removed'])) === 'true') {
         add_settings_error(
             'ssll_messages',
             'ssll_message',
-            __('Logo has been removed.', 'ssll-for-wp'),
+            esc_html__('Logo has been removed.', 'stupid-simple-login-logo'),
             'updated'
         );
-    } elseif (isset($_GET['error']) && $_GET['error'] === 'no_logo') {
+    } elseif (isset($_GET['error']) && sanitize_text_field(wp_unslash($_GET['error'])) === 'no_logo') {
         add_settings_error(
             'ssll_messages',
             'ssll_message',
-            __('Please select a logo before saving.', 'ssll-for-wp'),
+            esc_html__('Please select a logo before saving.', 'stupid-simple-login-logo'),
             'error'
         );
     }
@@ -190,35 +196,54 @@ function ssll_render_settings_page() {
             
             <div style="margin: 2em 0;">
                 <?php if (!empty($logo_url)) : ?>
-                    <img src="<?php echo esc_url($logo_url); ?>" 
-                         id="logo_preview"
-                         alt="<?php esc_attr_e('Current login logo', 'ssll-for-wp'); ?>"
-                         style="max-width: 320px; height: auto;">
+                    <?php
+                    // Get attachment ID from URL and use wp_get_attachment_image for security.
+                    $attachment_id = attachment_url_to_postid($logo_url);
+                    if ($attachment_id) {
+                        echo wp_get_attachment_image($attachment_id, 'medium', false, [
+                            'id' => 'logo_preview',
+                            'style' => 'max-width: 320px; height: auto;',
+                            'alt' => esc_attr__('Current login logo', 'stupid-simple-login-logo')
+                        ]);
+                    } else {
+                        // Fallback for non-media library images (e.g. external URLs)
+                        // Using esc_url() for security and proper escaping
+                        $escaped_logo_url = esc_url($logo_url);
+                        if (!empty($escaped_logo_url)) {
+                            ?>
+                            <img src="<?php echo esc_url($escaped_logo_url); ?>" 
+                                 id="logo_preview"
+                                 alt="<?php esc_attr_e('Current login logo', 'stupid-simple-login-logo'); ?>"
+                                 style="max-width: 320px; height: auto;">
+                            <?php
+                        }
+                    }
+                    ?>
                 <?php endif; ?>
             </div>
             
             <p>
                 <button type="button" class="button" id="upload_logo_button">
-                    <?php echo empty($logo_url) ? esc_html__('Select Logo', 'ssll-for-wp') : esc_html__('Change Logo', 'ssll-for-wp'); ?>
+                    <?php echo empty($logo_url) ? esc_html__('Select Logo', 'stupid-simple-login-logo') : esc_html__('Change Logo', 'stupid-simple-login-logo'); ?>
                 </button>
                 
                 <?php if (!empty($logo_url)) : ?>
                     <button type="button" class="button" id="remove_logo_button">
-                        <?php esc_html_e('Remove Logo', 'ssll-for-wp'); ?>
+                        <?php esc_html_e('Remove Logo', 'stupid-simple-login-logo'); ?>
                     </button>
                 <?php endif; ?>
             </p>
             
             <p class="description">
-                <?php esc_html_e('Choose an image from your Media Library to use as the login page logo. Accepted file types: JPEG, PNG, GIF, WebP, and AVIF.', 'ssll-for-wp'); ?>
+                <?php esc_html_e('Choose an image from your Media Library to use as the login page logo. Accepted file types: JPEG, PNG, GIF, WebP, and AVIF.', 'stupid-simple-login-logo'); ?>
             </p>
             
-            <?php submit_button(__('Save Changes', 'ssll-for-wp')); ?>
+            <?php submit_button(esc_html__('Save Changes', 'stupid-simple-login-logo')); ?>
             
             <?php if (!empty($logo_url)) : ?>
                 <p class="description" style="margin-top: 1em;">
                     <a href="<?php echo esc_url(wp_login_url()); ?>" target="_blank" class="button">
-                        <?php esc_html_e('Preview Login Page ↗', 'ssll-for-wp'); ?>
+                        <?php esc_html_e('Preview Login Page ↗', 'stupid-simple-login-logo'); ?>
                     </a>
                 </p>
             <?php endif; ?>

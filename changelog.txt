@@ -1,3 +1,16 @@
+VERSION 1.16.2
+01/20/2025
+1. WordPress 6.8 Compatibility
+- Updated "Tested up to" version to 6.8
+- Verified compatibility with WordPress 6.8
+- Updated plugin headers and documentation
+- Ensured all functionality works with latest WordPress version
+
+2. Documentation Updates
+- Updated readme.txt with WordPress 6.8 compatibility
+- Added comprehensive test checklist for WordPress 6.8
+- Updated plugin headers to reflect current testing status
+
 VERSION 1.16.1
 06/08/2025
 1. Security Enhancements
